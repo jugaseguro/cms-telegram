@@ -54,6 +54,7 @@ export function TransactionTable() {
         .from('transactions')
         .select('id, customer_id, agent_id, amount, status, receipt_url, notes, created_at, customers(first_name, last_name), profiles!transactions_agent_id_fkey(full_name)')
         .order('created_at', { ascending: false })
+        .limit(200)
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)

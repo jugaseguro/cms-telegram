@@ -51,7 +51,7 @@ export function useRealtimeConversations() {
           table: 'conversations',
         },
         () => {
-          queryClient.refetchQueries({ queryKey: ['conversations'] })
+          queryClient.invalidateQueries({ queryKey: ['conversations'] })
         }
       )
       .on(

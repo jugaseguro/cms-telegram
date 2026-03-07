@@ -60,6 +60,7 @@ export function CustomerTable() {
         .from('customers')
         .select('id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, created_at')
         .order('created_at', { ascending: false })
+        .limit(200)
       if (error) throw error
       return data as Customer[]
     },
@@ -72,6 +73,7 @@ export function CustomerTable() {
         .from('transactions')
         .select('id, customer_id, amount, status, created_at')
         .order('created_at', { ascending: false })
+        .limit(500)
       if (error) throw error
       return data as Transaction[]
     },
