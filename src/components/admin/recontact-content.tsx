@@ -1,0 +1,389 @@
+'use client'
+
+import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { createClient } from '@/lib/supabase/client'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
+import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { toast } from 'sonner'
+import { formatDistanceToNow } from 'date-fns'
+import { es } from 'date-fns/locale'
+import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
+
+const supabase = createClient()
+
+const conditionLabels: Record<string, string> = {
+  inactive_days: 'Inactivo (días)',
+  no_payment: 'Sin pago',
+  vip_inactive: 'VIP inactivo',
+}
+
+export function RecontactContent() {
+  const queryClient = useQueryClient()
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [editing, setEditing] = useState<RecontactRule | null>(null)
+  const [form, setForm] = useState({
+    name: '',
+    description: '',
+    condition_type: 'inactive_days' as RecontactRule['condition_type'],
+    condition_days: 7,
+    message_template: '',
+  })
+
+  const { data: rules, isLoading } = useQuery({
+    queryKey: ['recontact-rules'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('recontact_rules')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data as RecontactRule[]
+    },
+  })
+
+  const { data: logs } = useQuery({
+    queryKey: ['recontact-logs'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('recontact_logs')
+        .select('*, customers(first_name, last_name, telegram_username), recontact_rules(name)')
+        .order('sent_at', { ascending: false })
+        .limit(20)
+      if (error) throw error
+      return data as (RecontactLog & {
+        customers: { first_name: string | null; last_name: string | null; telegram_username: string | null }
+        recontact_rules: { name: string }
+      })[]
+    },
+  })
+
+  const saveMutation = useMutation({
+    mutationFn: async (data: typeof form) => {
+      const payload = {
+        name: data.name,
+        description: data.description || null,
+        condition_type: data.condition_type,
+        condition_days: data.condition_days,
+        message_template: data.message_template,
+      }
+      if (editing) {
+        const { error } = await supabase
+          .from('recontact_rules')
+          .update(payload)
+          .eq('id', editing.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase
+          .from('recontact_rules')
+          .insert(payload)
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success(editing ? 'Regla actualizada' : 'Regla creada')
+      queryClient.invalidateQueries({ queryKey: ['recontact-rules'] })
+      setDialogOpen(false)
+    },
+    onError: (err) => toast.error('Error: ' + err.message),
+  })
+
+  const toggleActive = useMutation({
+    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const { error } = await supabase
+        .from('recontact_rules')
+        .update({ is_active })
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['recontact-rules'] })
+    },
+  })
+
+  const deleteRule = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('recontact_rules')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Regla eliminada')
+      queryClient.invalidateQueries({ queryKey: ['recontact-rules'] })
+    },
+  })
+
+  function openCreate() {
+    setEditing(null)
+    setForm({
+      name: '',
+      description: '',
+      condition_type: 'inactive_days',
+      condition_days: 7,
+      message_template: '',
+    })
+    setDialogOpen(true)
+  }
+
+  function openEdit(rule: RecontactRule) {
+    setEditing(rule)
+    setForm({
+      name: rule.name,
+      description: rule.description ?? '',
+      condition_type: rule.condition_type,
+      condition_days: rule.condition_days,
+      message_template: rule.message_template,
+    })
+    setDialogOpen(true)
+  }
+
+  return (
+    <>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold">Recontacto automático</h1>
+        <Button onClick={openCreate}>
+          <Plus className="mr-2 h-4 w-4" />
+          Nueva regla
+        </Button>
+      </div>
+
+      <div className="rounded-lg border bg-card">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Nombre</TableHead>
+              <TableHead>Condición</TableHead>
+              <TableHead>Días</TableHead>
+              <TableHead>Activa</TableHead>
+              <TableHead className="w-[100px]">Acciones</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {isLoading && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center">
+                  Cargando...
+                </TableCell>
+              </TableRow>
+            )}
+            {rules?.length === 0 && !isLoading && (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  No hay reglas de recontacto configuradas
+                </TableCell>
+              </TableRow>
+            )}
+            {rules?.map((rule) => (
+              <TableRow key={rule.id}>
+                <TableCell className="font-medium">
+                  <div>
+                    <p>{rule.name}</p>
+                    {rule.description && (
+                      <p className="text-xs text-muted-foreground truncate max-w-[200px]">
+                        {rule.description}
+                      </p>
+                    )}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <Badge variant="outline">
+                    {conditionLabels[rule.condition_type]}
+                  </Badge>
+                </TableCell>
+                <TableCell>{rule.condition_days}</TableCell>
+                <TableCell>
+                  <Switch
+                    checked={rule.is_active}
+                    onCheckedChange={(checked) =>
+                      toggleActive.mutate({ id: rule.id, is_active: checked })
+                    }
+                  />
+                </TableCell>
+                <TableCell>
+                  <div className="flex gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openEdit(rule)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => deleteRule.mutate(rule.id)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {logs && logs.length > 0 && (
+        <div className="space-y-3">
+          <h2 className="text-lg font-semibold">Últimos envíos</h2>
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Regla</TableHead>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Enviado</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {logs.map((log) => (
+                  <TableRow key={log.id}>
+                    <TableCell className="font-medium">
+                      {log.recontact_rules?.name}
+                    </TableCell>
+                    <TableCell>
+                      {[log.customers?.first_name, log.customers?.last_name]
+                        .filter(Boolean)
+                        .join(' ') ||
+                        log.customers?.telegram_username ||
+                        'Sin nombre'}
+                    </TableCell>
+                    <TableCell className="text-muted-foreground" suppressHydrationWarning>
+                      {formatDistanceToNow(new Date(log.sent_at), {
+                        addSuffix: true,
+                        locale: es,
+                      })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editing ? 'Editar regla' : 'Nueva regla de recontacto'}
+            </DialogTitle>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault()
+              saveMutation.mutate(form)
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="rule-name">Nombre</Label>
+              <Input
+                id="rule-name"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                placeholder="ej: Recordatorio semanal"
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rule-description">Descripción (opcional)</Label>
+              <Input
+                id="rule-description"
+                value={form.description}
+                onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
+                placeholder="ej: Enviar a clientes inactivos"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Tipo de condición</Label>
+                <Select
+                  value={form.condition_type}
+                  onValueChange={(v) =>
+                    setForm((f) => ({ ...f, condition_type: v as RecontactRule['condition_type'] }))
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="inactive_days">Inactivo (días)</SelectItem>
+                    <SelectItem value="no_payment">Sin pago</SelectItem>
+                    <SelectItem value="vip_inactive">VIP inactivo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rule-days">Días</Label>
+                <Input
+                  id="rule-days"
+                  type="number"
+                  min={1}
+                  value={form.condition_days}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, condition_days: parseInt(e.target.value) || 1 }))
+                  }
+                />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="rule-template">Mensaje template</Label>
+              <Textarea
+                id="rule-template"
+                rows={3}
+                value={form.message_template}
+                onChange={(e) => setForm((f) => ({ ...f, message_template: e.target.value }))}
+                placeholder="Hola {{nombre}}, hace tiempo que no nos contactas..."
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                Usa {'{{nombre}}'} para insertar el nombre del cliente
+              </p>
+            </div>
+            <div className="flex justify-end gap-2">
+              <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                Cancelar
+              </Button>
+              <Button type="submit" disabled={saveMutation.isPending}>
+                {saveMutation.isPending
+                  ? 'Guardando...'
+                  : editing
+                    ? 'Actualizar'
+                    : 'Crear'}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
