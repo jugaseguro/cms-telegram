@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useMemo } from 'react'
+import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -12,7 +13,15 @@ import {
   CheckCircle,
   UserPlus,
 } from 'lucide-react'
-import { ReportsChart } from './reports-chart'
+import { Skeleton } from '@/components/ui/skeleton'
+
+const ReportsChart = dynamic(
+  () => import('./reports-chart').then((m) => m.ReportsChart),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[430px] w-full rounded-xl" />,
+  }
+)
 
 const supabase = createClient()
 
@@ -173,15 +182,15 @@ export function ReportsContent() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2">
+      <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
         {(['day', 'month', 'year'] as const).map((p) => (
           <button
             key={p}
             onClick={() => setPeriod(p)}
-            className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
               period === p
-                ? 'bg-primary text-primary-foreground shadow-sm'
-                : 'text-muted-foreground hover:bg-accent'
+                ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
             }`}
           >
             {periodLabels[p]}
@@ -190,18 +199,22 @@ export function ReportsContent() {
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {cards.map((card) => (
-          <Card key={card.title} className="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+        {cards.map((card, index) => (
+          <Card
+            key={card.title}
+            className="group relative overflow-hidden border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5"
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-primary/[0.03] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {card.title}
               </CardTitle>
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${card.color}`}>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.color} transition-transform duration-300 group-hover:scale-110`}>
                 <card.icon className="h-[18px] w-[18px]" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold tracking-tight tabular-nums">
+              <p className="text-3xl font-bold tracking-tight tabular-nums">
                 {card.value}
               </p>
             </CardContent>

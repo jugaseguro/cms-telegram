@@ -128,9 +128,11 @@ create index idx_conversations_status on public.conversations(status);
 create index idx_conversations_last_message on public.conversations(last_message_at desc);
 create index idx_messages_conversation_id on public.messages(conversation_id);
 create index idx_messages_created_at on public.messages(created_at);
+create index idx_messages_conversation_date on public.messages(conversation_id, created_at desc);
 create index idx_transactions_customer_id on public.transactions(customer_id);
 create index idx_transactions_status on public.transactions(status);
 create unique index idx_auto_responses_shortcut on public.auto_responses(shortcut) where shortcut is not null;
+create unique index idx_messages_unique_telegram_msg on public.messages(conversation_id, telegram_message_id) where telegram_message_id is not null;
 
 -- ============================================
 -- ROW LEVEL SECURITY
@@ -147,11 +149,33 @@ alter table public.conversation_labels enable row level security;
 alter table public.recontact_rules enable row level security;
 alter table public.recontact_logs enable row level security;
 
--- Helper function: get user role
+-- Helper function: get user role (reads from JWT, falls back to DB query)
 create or replace function public.get_user_role()
 returns text as $$
-  select role from public.profiles where id = auth.uid();
-$$ language sql security definer stable;
+  select coalesce(
+    (current_setting('request.jwt.claims', true)::json->'app_metadata'->>'user_role'),
+    (select role from public.profiles where id = auth.uid())
+  );
+$$ language sql security definer stable
+set search_path = '';
+
+-- Sync role changes to JWT app_metadata
+create or replace function public.sync_role_to_jwt()
+returns trigger as $$
+begin
+  if new.role is distinct from old.role then
+    update auth.users
+    set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || jsonb_build_object('user_role', new.role)
+    where id = new.id;
+  end if;
+  return new;
+end;
+$$ language plpgsql security definer
+set search_path = '';
+
+create trigger on_profile_role_change
+  after update of role on public.profiles
+  for each row execute function public.sync_role_to_jwt();
 
 -- PROFILES policies
 create policy "Profiles are viewable by authenticated users"
@@ -318,7 +342,8 @@ begin
   );
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer
+set search_path = '';
 
 create or replace trigger on_auth_user_created
   after insert on auth.users
@@ -333,7 +358,8 @@ begin
   where id = new.conversation_id;
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer
+set search_path = '';
 
 create or replace trigger on_new_message
   after insert on public.messages
@@ -355,7 +381,8 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql security definer;
+$$ language plpgsql security definer
+set search_path = '';
 
 create trigger on_message_response_tracking
   after insert on public.messages

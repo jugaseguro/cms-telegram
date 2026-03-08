@@ -1,13 +1,13 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { useSendMessage } from '@/hooks/use-messages'
 import { useAuthStore } from '@/stores/auth-store'
-import { Send, Paperclip, Loader2, Lock, MessageSquare, X } from 'lucide-react'
+import { Send, Paperclip, Loader2, Lock, MessageSquare, X, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { QuickRepliesPopover } from './quick-replies-popover'
@@ -29,9 +29,18 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   const [uploading, setUploading] = useState(false)
   const [showSlashMenu, setShowSlashMenu] = useState(false)
   const [slashQuery, setSlashQuery] = useState('')
+  const [rateLimitRemaining, setRateLimitRemaining] = useState<number | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore()
   const sendMessage = useSendMessage()
+
+  const trackRateLimit = useCallback((remaining: number | null) => {
+    setRateLimitRemaining(remaining)
+    if (remaining !== null && remaining <= 0) {
+      // Reset the counter after 60 seconds
+      setTimeout(() => setRateLimitRemaining(null), 60_000)
+    }
+  }, [])
 
   const { data: autoResponses } = useQuery({
     queryKey: ['auto-responses-active'],
@@ -56,16 +65,25 @@ export function MessageInput({ conversationId }: MessageInputProps) {
 
     if (!text.trim()) return
 
+    const content = text.trim()
+    setText('')
     sendMessage.mutate(
       {
         conversationId,
-        content: text.trim(),
+        content,
         senderId: user.id,
         isInternal,
       },
       {
-        onSuccess: () => setText(''),
-        onError: (err) => toast.error('Error al enviar: ' + err.message),
+        onError: (err) => {
+          setText(content)
+          if (err.message.startsWith('Rate limit')) {
+            toast.error(err.message)
+            trackRateLimit(0)
+          } else {
+            toast.error('Error al enviar: ' + err.message)
+          }
+        },
       }
     )
   }
@@ -161,10 +179,25 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
   }
 
-  const isSending = sendMessage.isPending || uploading
+  const isSending = uploading
 
   return (
-    <div className="border-t">
+    <div className="border-t bg-card/60 backdrop-blur-sm">
+      {/* Rate limit warning */}
+      {rateLimitRemaining !== null && rateLimitRemaining <= 5 && (
+        <div className={cn(
+          'flex items-center gap-2 px-4 py-2 text-sm',
+          rateLimitRemaining <= 0
+            ? 'bg-destructive/10 text-destructive'
+            : 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-400'
+        )}>
+          <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+          {rateLimitRemaining <= 0
+            ? 'Límite alcanzado. Esperá un momento antes de enviar más mensajes.'
+            : `Quedan ${rateLimitRemaining} mensajes disponibles este minuto.`
+          }
+        </div>
+      )}
       {/* Tabs: Mensaje / Nota interna */}
       <div className="flex border-b">
         <button
@@ -274,6 +307,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
           onClick={handleSend}
           disabled={(!text.trim() && !pendingFile) || isSending}
           size="icon"
+          className="rounded-xl h-10 w-10 shadow-sm shadow-primary/20 transition-all duration-200 hover:shadow-md hover:shadow-primary/25"
         >
           {isSending ? (
             <Loader2 className="h-5 w-5 animate-spin" />

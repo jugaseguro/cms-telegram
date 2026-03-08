@@ -1,8 +1,39 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.isMessageAlreadySaved = isMessageAlreadySaved;
+exports.insertMessageSafe = insertMessageSafe;
 exports.findOrCreateCustomer = findOrCreateCustomer;
 exports.findOrCreateConversation = findOrCreateConversation;
 const supabase_1 = require("./lib/supabase");
+/**
+ * Check if a message with this telegram_message_id already exists in the conversation.
+ */
+async function isMessageAlreadySaved(conversationId, telegramMessageId) {
+    if (!telegramMessageId)
+        return false;
+    const { data } = await supabase_1.supabase
+        .from('messages')
+        .select('id')
+        .eq('conversation_id', conversationId)
+        .eq('telegram_message_id', telegramMessageId)
+        .limit(1)
+        .maybeSingle();
+    return !!data;
+}
+/**
+ * Insert a message, silently ignoring unique constraint violations (duplicate telegram_message_id).
+ */
+async function insertMessageSafe(messageData) {
+    const { error } = await supabase_1.supabase.from('messages').insert(messageData);
+    if (error) {
+        // 23505 = unique_violation — expected for duplicate telegram messages
+        if (error.code === '23505')
+            return false;
+        console.error('Error inserting message:', error);
+        return false;
+    }
+    return true;
+}
 /**
  * Find existing customer by telegram_id or create a new one.
  */

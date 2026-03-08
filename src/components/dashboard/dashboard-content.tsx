@@ -39,21 +39,26 @@ export function DashboardContent() {
   const icons = { totalConversations: MessageSquare, openConversations: Clock, totalCustomers: Users, pendingTransactions: DollarSign }
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {DASHBOARD_CARDS_CONFIG.map((card) => {
+    <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {DASHBOARD_CARDS_CONFIG.map((card, index) => {
         const Icon = icons[card.key]
         return (
-          <Card key={card.title} className="shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <Card
+            key={card.title}
+            className="group relative overflow-hidden border shadow-sm transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-primary/5"
+            style={{ animationDelay: `${index * 75}ms` }}
+          >
+            <div className="absolute inset-0 bg-gradient-to-br from-transparent via-transparent to-primary/[0.03] opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium text-muted-foreground">
                 {card.title}
               </CardTitle>
-              <div className={`flex h-9 w-9 items-center justify-center rounded-lg ${card.color}`}>
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.color} transition-transform duration-300 group-hover:scale-110`}>
                 <Icon className="h-[18px] w-[18px]" />
               </div>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold tracking-tight tabular-nums">{stats?.[card.key] ?? 0}</p>
+              <p className="text-3xl font-bold tracking-tight tabular-nums">{stats?.[card.key] ?? 0}</p>
             </CardContent>
           </Card>
         )

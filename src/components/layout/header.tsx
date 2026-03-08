@@ -39,16 +39,16 @@ export function Header() {
     <header className="flex h-14 items-center justify-between border-b bg-card/60 px-6 backdrop-blur-sm">
       <button
         onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+        className="relative flex h-9 w-9 items-center justify-center rounded-xl text-muted-foreground transition-all duration-200 hover:bg-accent hover:text-foreground hover:shadow-sm cursor-pointer"
         title="Cambiar tema"
       >
-        <Sun className="h-4 w-4 rotate-0 scale-100 transition-transform dark:-rotate-90 dark:scale-0" />
-        <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-transform dark:rotate-0 dark:scale-100" />
+        <Sun className="h-[18px] w-[18px] rotate-0 scale-100 transition-transform duration-300 dark:-rotate-90 dark:scale-0" />
+        <Moon className="absolute h-[18px] w-[18px] rotate-90 scale-0 transition-transform duration-300 dark:rotate-0 dark:scale-100" />
       </button>
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-full py-1 pl-1 pr-3 transition-colors hover:bg-accent outline-none">
+        <DropdownMenuTrigger className="flex items-center gap-2.5 rounded-xl py-1.5 pl-1.5 pr-3 transition-all duration-200 hover:bg-accent/80 hover:shadow-sm outline-none cursor-pointer">
           <Avatar className="h-7 w-7">
-            <AvatarFallback className="bg-primary/10 text-xs font-semibold text-primary">
+            <AvatarFallback className="bg-primary/10 text-xs font-bold text-primary">
               {initials}
             </AvatarFallback>
           </Avatar>
@@ -63,7 +63,7 @@ export function Header() {
             <p className="text-xs text-muted-foreground">{profile?.email}</p>
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
-          <DropdownMenuItem onClick={handleLogout}>
+          <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
             <LogOut className="mr-2 h-4 w-4" />
             Cerrar sesion
           </DropdownMenuItem>

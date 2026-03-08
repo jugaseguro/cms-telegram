@@ -1,10 +1,10 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, memo } from 'react'
 import { cn } from '@/lib/utils'
 import { format } from 'date-fns'
 import type { Message } from '@/lib/supabase/types'
-import { FileText, Lock, Pencil, Trash2, Check, X } from 'lucide-react'
+import { FileText, Lock, Pencil, Trash2, Check, X, Clock } from 'lucide-react'
 import { useUpdateMessage, useDeleteMessage } from '@/hooks/use-messages'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
@@ -69,10 +69,11 @@ function ClickableImage({ src, alt, className }: { src: string; alt: string; cla
   )
 }
 
-export function MessageBubble({ message }: MessageBubbleProps) {
+export const MessageBubble = memo(function MessageBubble({ message }: MessageBubbleProps) {
   const isAgent = message.sender_type === 'agent'
   const isBot = message.sender_type === 'bot'
-  const isInternal = (message as Message & { is_internal?: boolean }).is_internal
+  const isInternal = message.is_internal
+  const isOptimistic = message.id.startsWith('optimistic-')
 
   const [isEditing, setIsEditing] = useState(false)
   const [editText, setEditText] = useState(message.content || '')
@@ -142,14 +143,14 @@ export function MessageBubble({ message }: MessageBubbleProps) {
       )}
       <div
         className={cn(
-          'max-w-[70%] rounded-2xl px-4 py-2',
+          'max-w-[70%] rounded-2xl px-4 py-2.5 shadow-sm',
           isInternal
-            ? 'bg-amber-100 text-amber-900 border border-amber-300 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700'
+            ? 'bg-amber-50 text-amber-900 border border-amber-200/80 dark:bg-amber-900/30 dark:text-amber-100 dark:border-amber-700/60'
             : isAgent
-            ? 'bg-bubble-agent-bg text-bubble-agent-text'
+            ? 'bg-bubble-agent-bg text-bubble-agent-text shadow-primary/10 rounded-br-md'
             : isBot
             ? 'bg-bubble-bot-bg text-bubble-bot-text'
-            : 'bg-bubble-customer-bg text-bubble-customer-text border border-border'
+            : 'bg-bubble-customer-bg text-bubble-customer-text border border-border/60 rounded-bl-md'
         )}
       >
         {isInternal && (
@@ -241,9 +242,13 @@ export function MessageBubble({ message }: MessageBubbleProps) {
           )}
           suppressHydrationWarning
         >
-          {format(new Date(message.created_at), 'HH:mm')}
+          {isOptimistic ? (
+            <Clock className="inline h-3 w-3" />
+          ) : (
+            format(new Date(message.created_at), 'HH:mm')
+          )}
         </p>
       </div>
     </div>
   )
-}
+})

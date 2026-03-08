@@ -1,7 +1,6 @@
 import 'dotenv/config'
 import { createBot } from './bot'
-import { webhookCallback } from 'grammy'
-import { createServer } from 'http'
+import { createServer, type IncomingMessage } from 'http'
 import { startRecontactCron } from './cron/recontact'
 
 const BOT_TOKEN = process.env.BOT_TOKEN!
@@ -11,6 +10,15 @@ const MODE = process.env.MODE || 'polling' // 'polling' | 'webhook'
 
 const bot = createBot(BOT_TOKEN)
 
+function readBody(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    let body = ''
+    req.on('data', (chunk: Buffer) => { body += chunk.toString() })
+    req.on('end', () => resolve(body))
+    req.on('error', reject)
+  })
+}
+
 async function start() {
   if (MODE === 'webhook' && WEBHOOK_URL) {
     // Webhook mode (for Railway)
@@ -18,8 +26,20 @@ async function start() {
 
     const server = createServer(async (req, res) => {
       if (req.url === '/webhook' && req.method === 'POST') {
-        const handler = webhookCallback(bot, 'http')
-        await handler(req, res)
+        // Read body and respond 200 immediately to prevent Telegram retries
+        const body = await readBody(req)
+        res.writeHead(200)
+        res.end()
+
+        // Process update in background
+        try {
+          const update = JSON.parse(body)
+          bot.handleUpdate(update).catch((err) => {
+            console.error(`Error processing update ${update.update_id}:`, err)
+          })
+        } catch (err) {
+          console.error('Failed to parse webhook body:', err)
+        }
       } else if (req.url === '/health') {
         res.writeHead(200)
         res.end('OK')

@@ -1,5 +1,6 @@
 'use client'
 
+import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -17,7 +18,7 @@ interface ConversationItemProps {
   onClick: () => void
 }
 
-export function ConversationItem({
+export const ConversationItem = memo(function ConversationItem({
   conversation,
   isActive,
   onClick,
@@ -35,17 +36,26 @@ export function ConversationItem({
     <button
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors',
+        'flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all duration-200 cursor-pointer',
         isActive
-          ? 'bg-primary/10'
+          ? 'bg-primary/10 shadow-sm shadow-primary/5'
           : isUnread
-          ? 'bg-emerald-500/10 hover:bg-emerald-500/15'
-          : 'hover:bg-accent'
+          ? 'bg-emerald-500/8 hover:bg-emerald-500/12'
+          : 'hover:bg-accent/60'
       )}
     >
-      <div className="relative">
-        <Avatar className={cn('h-10 w-10', isUnread && 'ring-2 ring-emerald-500')}>
-          <AvatarFallback>{initials}</AvatarFallback>
+      <div className="relative flex-shrink-0">
+        <Avatar className={cn(
+          'h-10 w-10 transition-all duration-200',
+          isUnread && 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-background',
+          isActive && 'ring-2 ring-primary/30 ring-offset-1 ring-offset-background'
+        )}>
+          <AvatarFallback className={cn(
+            'text-xs font-semibold',
+            isActive ? 'bg-primary/15 text-primary' : 'bg-muted'
+          )}>
+            {initials}
+          </AvatarFallback>
         </Avatar>
         {isUnread && (
           <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />
@@ -57,20 +67,20 @@ export function ConversationItem({
         )}
       </div>
       <div className="flex-1 overflow-hidden">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <p className={cn('truncate text-sm', isUnread ? 'font-bold' : 'font-medium')}>
             {name}
           </p>
           <Badge
             variant="secondary"
-            className={cn('text-xs', CONVERSATION_STATUS_COLORS[conversation.status])}
+            className={cn('text-[10px] px-1.5 py-0 h-5 flex-shrink-0', CONVERSATION_STATUS_COLORS[conversation.status])}
           >
             {conversation.status}
           </Badge>
         </div>
         {conversation.last_message_at && (
           <p className={cn(
-            'text-xs',
+            'text-xs mt-0.5',
             isUnread ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
           )} suppressHydrationWarning>
             {formatDistanceToNow(new Date(conversation.last_message_at), {
@@ -80,11 +90,11 @@ export function ConversationItem({
           </p>
         )}
         {conversation.profiles && (
-          <p className="text-xs text-muted-foreground">
+          <p className="text-[11px] text-muted-foreground mt-0.5">
             Agente: {conversation.profiles.full_name}
           </p>
         )}
-        <div className="flex items-center gap-1 mt-0.5 flex-wrap">
+        <div className="flex items-center gap-1 mt-1 flex-wrap">
           {conversation.waiting_since && (
             <WaitingBadge waitingSince={conversation.waiting_since} compact />
           )}
@@ -106,4 +116,4 @@ export function ConversationItem({
       </div>
     </button>
   )
-}
+})

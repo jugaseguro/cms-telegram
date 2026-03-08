@@ -1,6 +1,6 @@
 import { Context } from 'grammy'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
 export async function handlePhoto(ctx: Context) {
   const from = ctx.from
@@ -12,6 +12,9 @@ export async function handlePhoto(ctx: Context) {
 
   const conversation = await findOrCreateConversation(customer.id)
   if (!conversation) return
+
+  // Dedup: skip before downloading file to save bandwidth
+  if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
 
   // Get highest resolution photo and resolve to downloadable URL
   const fileId = photo[photo.length - 1].file_id
@@ -43,7 +46,7 @@ export async function handlePhoto(ctx: Context) {
     // Fallback to Telegram CDN URL if upload fails
   }
 
-  await supabase.from('messages').insert({
+  await insertMessageSafe({
     conversation_id: conversation.id,
     sender_type: 'customer',
     sender_id: String(from.id),

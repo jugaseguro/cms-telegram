@@ -15,8 +15,8 @@ import {
 import { MessageSquare } from 'lucide-react'
 
 export function ChatsContent() {
-  const { activeConversationId, statusFilter } = useChatStore()
-  const { data: conversations } = useConversations(statusFilter)
+  const { activeConversationId } = useChatStore()
+  const { data: conversations } = useConversations()
   const [profileOpen, setProfileOpen] = useState(false)
 
   const activeConversation = conversations?.find(
@@ -41,12 +41,14 @@ export function ChatsContent() {
             />
           </div>
         ) : (
-          <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground">
-            <MessageSquare className="mb-4 h-12 w-12" />
-            <p className="text-lg font-medium">
+          <div className="flex flex-1 flex-col items-center justify-center text-muted-foreground animate-fade-in">
+            <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-primary/8 mb-5">
+              <MessageSquare className="h-10 w-10 text-primary/40" />
+            </div>
+            <p className="text-lg font-semibold text-foreground/70">
               Selecciona una conversación
             </p>
-            <p className="text-sm">
+            <p className="text-sm mt-1">
               Elige un chat de la lista para comenzar
             </p>
           </div>

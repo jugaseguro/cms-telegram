@@ -8,6 +8,10 @@ export function playNotificationSound() {
 
     const ctx = audioContext
 
+    if (ctx.state === 'suspended') {
+      ctx.resume()
+    }
+
     // Two-tone notification beep
     const now = ctx.currentTime
     const gain = ctx.createGain()

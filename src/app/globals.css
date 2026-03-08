@@ -131,9 +131,9 @@
   /* Chat bubbles */
   --bubble-agent-bg: oklch(0.72 0.12 230);
   --bubble-agent-text: oklch(0.99 0 0);
-  --bubble-customer-bg: oklch(0.995 0.002 240);
+  --bubble-customer-bg: oklch(0.997 0.002 240);
   --bubble-customer-text: oklch(0.20 0.015 240);
-  --bubble-bot-bg: oklch(0.94 0.08 85);
+  --bubble-bot-bg: oklch(0.95 0.06 85);
   --bubble-bot-text: oklch(0.30 0.06 70);
 }
 
@@ -213,21 +213,29 @@
   html {
     @apply font-sans;
     letter-spacing: -0.011em;
+    scroll-behavior: smooth;
   }
   h1, h2, h3, h4 {
     letter-spacing: -0.02em;
   }
 }
 
+/* Chat background pattern */
 .chat-bg {
-  background-image: radial-gradient(circle, oklch(0.85 0.015 240) 1px, transparent 1px);
-  background-size: 20px 20px;
+  background-color: oklch(0.97 0.008 240);
+  background-image:
+    radial-gradient(circle at 20px 20px, oklch(0.92 0.012 240) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
 .dark .chat-bg {
-  background-image: radial-gradient(circle, oklch(0.25 0.015 240) 1px, transparent 1px);
+  background-color: oklch(0.18 0.012 240);
+  background-image:
+    radial-gradient(circle at 20px 20px, oklch(0.22 0.012 240) 1px, transparent 1px);
+  background-size: 24px 24px;
 }
 
+/* Animations */
 @keyframes fade-in-up {
   from {
     opacity: 0;
@@ -239,6 +247,75 @@
   }
 }
 
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slide-in-right {
+  from {
+    opacity: 0;
+    transform: translateX(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-subtle {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
 .animate-fade-in-up {
   animation: fade-in-up 0.3s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.2s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.2s ease-out;
+}
+
+/* Scrollbar styling */
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: oklch(0.82 0.01 240) transparent;
+}
+
+.dark .scrollbar-thin {
+  scrollbar-color: oklch(0.30 0.01 240) transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+}
+
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: oklch(0.82 0.01 240);
+  border-radius: 3px;
+}
+
+.dark .scrollbar-thin::-webkit-scrollbar-thumb {
+  background-color: oklch(0.30 0.01 240);
+}
+
+/* Glass card effect */
+.glass-card {
+  background: oklch(0.99 0.003 240 / 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.90 0.015 240);
+}
+
+.dark .glass-card {
+  background: oklch(0.22 0.012 240 / 0.8);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(0.30 0.012 240);
 }

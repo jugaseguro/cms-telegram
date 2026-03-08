@@ -1,6 +1,6 @@
 import { Context } from 'grammy'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 import type { AutoResponse } from '../lib/types'
 
 export async function handleTextMessage(ctx: Context) {
@@ -16,8 +16,11 @@ export async function handleTextMessage(ctx: Context) {
   const conversation = await findOrCreateConversation(customer.id)
   if (!conversation) return
 
+  // Dedup: skip if this telegram message was already saved
+  if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
+
   // Save customer message
-  await supabase.from('messages').insert({
+  await insertMessageSafe({
     conversation_id: conversation.id,
     sender_type: 'customer',
     sender_id: String(from.id),

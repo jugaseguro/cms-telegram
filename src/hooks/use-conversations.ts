@@ -4,20 +4,15 @@ import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 const supabase = createClient()
 
-export function useConversations(statusFilter: 'all' | 'open' | 'closed' | 'pending') {
+export function useConversations() {
   return useQuery({
-    queryKey: ['conversations', statusFilter],
+    queryKey: ['conversations'],
     queryFn: async () => {
-      let query = supabase
+      const { data, error } = await supabase
         .from('conversations')
         .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, created_at, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, created_at), profiles(id, full_name), conversation_labels(label_id, labels(*))')
         .order('last_message_at', { ascending: false })
 
-      if (statusFilter !== 'all') {
-        query = query.eq('status', statusFilter)
-      }
-
-      const { data, error } = await query
       if (error) throw error
       return data as ConversationWithCustomerAndLabels[]
     },

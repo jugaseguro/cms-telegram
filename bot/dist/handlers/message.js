@@ -16,8 +16,11 @@ async function handleTextMessage(ctx) {
     const conversation = await (0, helpers_1.findOrCreateConversation)(customer.id);
     if (!conversation)
         return;
+    // Dedup: skip if this telegram message was already saved
+    if (await (0, helpers_1.isMessageAlreadySaved)(conversation.id, ctx.message?.message_id))
+        return;
     // Save customer message
-    await supabase_1.supabase.from('messages').insert({
+    await (0, helpers_1.insertMessageSafe)({
         conversation_id: conversation.id,
         sender_type: 'customer',
         sender_id: String(from.id),

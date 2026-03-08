@@ -2,6 +2,50 @@ import { supabase } from './lib/supabase'
 import type { Customer, Conversation } from './lib/types'
 
 /**
+ * Check if a message with this telegram_message_id already exists in the conversation.
+ */
+export async function isMessageAlreadySaved(
+  conversationId: string,
+  telegramMessageId: number | undefined
+): Promise<boolean> {
+  if (!telegramMessageId) return false
+
+  const { data } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('telegram_message_id', telegramMessageId)
+    .limit(1)
+    .maybeSingle()
+
+  return !!data
+}
+
+/**
+ * Insert a message, silently ignoring unique constraint violations (duplicate telegram_message_id).
+ */
+export async function insertMessageSafe(messageData: {
+  conversation_id: string
+  sender_type: string
+  sender_id?: string
+  content?: string
+  message_type: string
+  media_url?: string
+  telegram_message_id?: number | null
+}): Promise<boolean> {
+  const { error } = await supabase.from('messages').insert(messageData)
+
+  if (error) {
+    // 23505 = unique_violation — expected for duplicate telegram messages
+    if (error.code === '23505') return false
+    console.error('Error inserting message:', error)
+    return false
+  }
+
+  return true
+}
+
+/**
  * Find existing customer by telegram_id or create a new one.
  */
 export async function findOrCreateCustomer(from: {

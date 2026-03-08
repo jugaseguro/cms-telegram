@@ -1,6 +1,6 @@
 import { Context } from 'grammy'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
 // Matches a UUID-like code (e.g. "abc-123-def" or standard UUID)
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
@@ -22,8 +22,11 @@ export async function handleStart(ctx: Context) {
   const conversation = await findOrCreateConversation(customer.id)
   if (!conversation) return
 
+  // Dedup: skip if this telegram message was already saved
+  if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
+
   // Save the /start message
-  await supabase.from('messages').insert({
+  await insertMessageSafe({
     conversation_id: conversation.id,
     sender_type: 'customer',
     sender_id: String(from.id),

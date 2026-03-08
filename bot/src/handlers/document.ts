@@ -1,6 +1,6 @@
 import { Context } from 'grammy'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
 export async function handleDocument(ctx: Context) {
   const from = ctx.from
@@ -12,6 +12,9 @@ export async function handleDocument(ctx: Context) {
 
   const conversation = await findOrCreateConversation(customer.id)
   if (!conversation) return
+
+  // Dedup: skip before downloading file to save bandwidth
+  if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
 
   // Resolve file_id to downloadable URL
   const file = await ctx.api.getFile(document.file_id)
@@ -42,7 +45,7 @@ export async function handleDocument(ctx: Context) {
     // Fallback to Telegram CDN URL if upload fails
   }
 
-  await supabase.from('messages').insert({
+  await insertMessageSafe({
     conversation_id: conversation.id,
     sender_type: 'customer',
     sender_id: String(from.id),
