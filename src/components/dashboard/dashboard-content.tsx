@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MessageSquare, Users, DollarSign, Clock } from 'lucide-react'
 import { DASHBOARD_CARDS_CONFIG } from '@/lib/constants'
@@ -16,8 +17,11 @@ interface Stats {
 }
 
 export function DashboardContent() {
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats'],
+    enabled: isInitialized,
     queryFn: async (): Promise<Stats> => {
       const [conversations, openConvs, customers, transactions] =
         await Promise.all([

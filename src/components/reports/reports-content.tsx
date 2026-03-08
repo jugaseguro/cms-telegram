@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react'
 import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthStore } from '@/stores/auth-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Users,
@@ -46,8 +47,11 @@ export function ReportsContent() {
   const [period, setPeriod] = useState<Period>('month')
   const range = useMemo(() => getDateRange(period), [period])
 
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   const { data: stats } = useQuery({
     queryKey: ['reports-stats', period],
+    enabled: isInitialized,
     queryFn: async () => {
       const [customers, conversations, txConfirmed, txPending, txAll, newCustomers] =
         await Promise.all([
@@ -102,6 +106,7 @@ export function ReportsContent() {
 
   const { data: chartData } = useQuery({
     queryKey: ['reports-chart', period],
+    enabled: isInitialized,
     queryFn: async () => {
       const [convData, txData, custData] = await Promise.all([
         supabase

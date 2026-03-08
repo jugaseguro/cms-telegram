@@ -65,7 +65,7 @@ export function useRealtimeMessages(conversationId: string | null) {
   }, [conversationId, queryClient])
 }
 
-export function useRealtimeConversations() {
+export function useRealtimeConversations(enabled = true) {
   const queryClient = useQueryClient()
   const markUnread = useChatStore((s) => s.markUnread)
   const setStatus = useRealtimeStore((s) => s.setStatus)
@@ -80,6 +80,7 @@ export function useRealtimeConversations() {
   }, [queryClient])
 
   useEffect(() => {
+    if (!enabled) return
     isFirstSubscription.current = true
 
     const channel = supabase
@@ -125,6 +126,8 @@ export function useRealtimeConversations() {
         if (status === 'SUBSCRIBED') {
           if (isFirstSubscription.current) {
             isFirstSubscription.current = false
+            // Invalidate on first subscribe to ensure fresh data after auth
+            queryClient.invalidateQueries({ queryKey: ['conversations'] })
           } else {
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
             queryClient.invalidateQueries({ queryKey: ['messages'] })
@@ -142,5 +145,5 @@ export function useRealtimeConversations() {
       clearTimeout(debounceTimer.current)
       supabase.removeChannel(channel)
     }
-  }, [queryClient, markUnread, setStatus, debouncedInvalidateConversations])
+  }, [enabled, queryClient, markUnread, setStatus, debouncedInvalidateConversations])
 }

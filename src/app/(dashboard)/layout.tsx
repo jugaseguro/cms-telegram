@@ -45,7 +45,7 @@ export default function DashboardLayout({
     }, 1500)
   }, [router])
 
-  useRealtimeConversations()
+  useRealtimeConversations(isInitialized)
   useTabTitle()
 
   useEffect(() => {

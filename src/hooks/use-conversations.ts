@@ -1,12 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 const supabase = createClient()
 
 export function useConversations() {
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   return useQuery({
     queryKey: ['conversations'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('conversations')
