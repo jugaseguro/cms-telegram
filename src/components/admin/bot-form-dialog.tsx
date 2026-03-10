@@ -23,19 +23,15 @@ const BOT_COLORS = [
   '#8b5cf6', '#ec4899', '#06b6d4', '#f97316',
 ]
 
-const createSchema = z.object({
+const schema = z.object({
   name: z.string().min(2, 'Nombre requerido'),
-  token: z.string().min(10, 'Token inválido'),
+  token: z.string().optional(),
   telegram_username: z.string().optional(),
   color: z.string(),
   welcome_message: z.string().optional(),
 })
 
-const editSchema = createSchema.extend({
-  token: z.string().optional(),
-})
-
-type FormData = z.infer<typeof createSchema>
+type FormData = z.infer<typeof schema>
 
 interface BotFormDialogProps {
   open: boolean
@@ -58,7 +54,7 @@ export function BotFormDialog({
     reset,
     formState: { errors },
   } = useForm<FormData>({
-    resolver: zodResolver(editBot ? editSchema : createSchema),
+    resolver: zodResolver(schema),
     defaultValues: {
       name: '',
       token: '',
@@ -152,6 +148,10 @@ export function BotFormDialog({
     if (editBot) {
       updateMutation.mutate(data)
     } else {
+      if (!data.token || data.token.length < 10) {
+        toast.error('Token de Telegram es requerido')
+        return
+      }
       createMutation.mutate(data)
     }
   }
