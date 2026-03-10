@@ -1,19 +1,19 @@
-import { Context } from 'grammy'
+import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 import type { AutoResponse } from '../lib/types'
 
-export async function handleTextMessage(ctx: Context) {
+export async function handleTextMessage(ctx: BotContext) {
   const from = ctx.from
   const text = ctx.message?.text
   if (!from || !text) return
 
   // Find or create customer
-  const customer = await findOrCreateCustomer(from)
+  const customer = await findOrCreateCustomer(from, ctx.botId)
   if (!customer) return
 
   // Find or create conversation
-  const conversation = await findOrCreateConversation(customer.id)
+  const conversation = await findOrCreateConversation(customer.id, ctx.botId)
   if (!conversation) return
 
   // Dedup: skip if this telegram message was already saved
@@ -29,11 +29,12 @@ export async function handleTextMessage(ctx: Context) {
     telegram_message_id: ctx.message?.message_id || null,
   })
 
-  // Check for auto-response matches
+  // Check for auto-response matches (global or per-bot)
   const { data: autoResponses } = await supabase
     .from('auto_responses')
     .select('*')
     .eq('is_active', true)
+    .or(`bot_id.is.null,bot_id.eq.${ctx.botId}`)
 
   if (autoResponses && autoResponses.length > 0) {
     const lowerText = text.toLowerCase()

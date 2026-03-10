@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBotStore } from '@/stores/bot-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Users,
@@ -21,6 +22,14 @@ const ReportsChart = dynamic(
   {
     ssr: false,
     loading: () => <Skeleton className="h-[430px] w-full rounded-xl" />,
+  }
+)
+
+const BotComparison = dynamic(
+  () => import('./bot-comparison').then((m) => m.BotComparison),
+  {
+    ssr: false,
+    loading: () => <Skeleton className="h-[300px] w-full rounded-xl" />,
   }
 )
 
@@ -48,44 +57,30 @@ export function ReportsContent() {
   const range = useMemo(() => getDateRange(period), [period])
 
   const isInitialized = useAuthStore((s) => s.isInitialized)
+  const selectedBotId = useBotStore((s) => s.selectedBotId)
 
   const { data: stats } = useQuery({
-    queryKey: ['reports-stats', period],
+    queryKey: ['reports-stats', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
+      let custAll = supabase.from('customers').select('id', { count: 'exact', head: true })
+      let convQuery = supabase.from('conversations').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
+      let txConfQ = supabase.from('transactions').select('id, amount', { count: 'exact' }).eq('status', 'confirmed').gte('created_at', range.start).lte('created_at', range.end)
+      let txPendQ = supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').gte('created_at', range.start).lte('created_at', range.end)
+      let txAllQ = supabase.from('transactions').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
+      let newCustQ = supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
+
+      if (selectedBotId) {
+        custAll = custAll.eq('bot_id', selectedBotId)
+        convQuery = convQuery.eq('bot_id', selectedBotId)
+        txConfQ = txConfQ.eq('bot_id', selectedBotId)
+        txPendQ = txPendQ.eq('bot_id', selectedBotId)
+        txAllQ = txAllQ.eq('bot_id', selectedBotId)
+        newCustQ = newCustQ.eq('bot_id', selectedBotId)
+      }
+
       const [customers, conversations, txConfirmed, txPending, txAll, newCustomers] =
-        await Promise.all([
-          supabase
-            .from('customers')
-            .select('id', { count: 'exact', head: true }),
-          supabase
-            .from('conversations')
-            .select('id', { count: 'exact', head: true })
-            .gte('created_at', range.start)
-            .lte('created_at', range.end),
-          supabase
-            .from('transactions')
-            .select('id, amount', { count: 'exact' })
-            .eq('status', 'confirmed')
-            .gte('created_at', range.start)
-            .lte('created_at', range.end),
-          supabase
-            .from('transactions')
-            .select('id', { count: 'exact', head: true })
-            .eq('status', 'pending')
-            .gte('created_at', range.start)
-            .lte('created_at', range.end),
-          supabase
-            .from('transactions')
-            .select('id', { count: 'exact', head: true })
-            .gte('created_at', range.start)
-            .lte('created_at', range.end),
-          supabase
-            .from('customers')
-            .select('id', { count: 'exact', head: true })
-            .gte('created_at', range.start)
-            .lte('created_at', range.end),
-        ])
+        await Promise.all([custAll, convQuery, txConfQ, txPendQ, txAllQ, newCustQ])
 
       const confirmedTotal = txConfirmed.data?.reduce(
         (sum, tx) => sum + Number(tx.amount),
@@ -105,29 +100,20 @@ export function ReportsContent() {
   })
 
   const { data: chartData } = useQuery({
-    queryKey: ['reports-chart', period],
+    queryKey: ['reports-chart', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      const [convData, txData, custData] = await Promise.all([
-        supabase
-          .from('conversations')
-          .select('created_at')
-          .gte('created_at', range.start)
-          .lte('created_at', range.end)
-          .order('created_at'),
-        supabase
-          .from('transactions')
-          .select('created_at, status')
-          .gte('created_at', range.start)
-          .lte('created_at', range.end)
-          .order('created_at'),
-        supabase
-          .from('customers')
-          .select('created_at')
-          .gte('created_at', range.start)
-          .lte('created_at', range.end)
-          .order('created_at'),
-      ])
+      let convQ = supabase.from('conversations').select('created_at').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
+      let txQ = supabase.from('transactions').select('created_at, status').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
+      let custQ = supabase.from('customers').select('created_at').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
+
+      if (selectedBotId) {
+        convQ = convQ.eq('bot_id', selectedBotId)
+        txQ = txQ.eq('bot_id', selectedBotId)
+        custQ = custQ.eq('bot_id', selectedBotId)
+      }
+
+      const [convData, txData, custData] = await Promise.all([convQ, txQ, custQ])
 
       return groupByPeriod(
         period,
@@ -228,6 +214,8 @@ export function ReportsContent() {
       </div>
 
       {chartData && <ReportsChart data={chartData} period={period} />}
+
+      {!selectedBotId && <BotComparison dateRange={range} />}
     </div>
   )
 }

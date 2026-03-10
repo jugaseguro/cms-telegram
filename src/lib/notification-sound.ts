@@ -1,6 +1,24 @@
 let audioContext: AudioContext | null = null
+let userHasInteracted = false
+
+if (typeof window !== 'undefined') {
+  const unlock = () => {
+    userHasInteracted = true
+    if (audioContext?.state === 'suspended') {
+      audioContext.resume()
+    }
+    window.removeEventListener('click', unlock)
+    window.removeEventListener('keydown', unlock)
+    window.removeEventListener('touchstart', unlock)
+  }
+  window.addEventListener('click', unlock)
+  window.addEventListener('keydown', unlock)
+  window.addEventListener('touchstart', unlock)
+}
 
 export function playNotificationSound() {
+  if (!userHasInteracted) return
+
   try {
     if (!audioContext) {
       audioContext = new AudioContext()

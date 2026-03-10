@@ -47,7 +47,7 @@ export function ConversationList() {
         </div>
       </div>
       <ScrollArea className="flex-1">
-        <div className="space-y-0.5 p-2">
+        <div className="space-y-1 p-2">
           {isLoading && (
             <div className="flex flex-col gap-3 p-4">
               {Array.from({ length: 5 }).map((_, i) => (

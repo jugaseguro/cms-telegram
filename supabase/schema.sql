@@ -8,6 +8,17 @@ create extension if not exists "uuid-ossp";
 -- TABLES
 -- ============================================
 
+-- Bots: Telegram bot configurations
+create table public.bots (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  telegram_username text,
+  token_encrypted text not null,
+  is_active boolean not null default true,
+  color text not null default '#3b82f6',
+  created_at timestamptz not null default now()
+);
+
 -- Profiles: Panel users (agents & admins)
 create table public.profiles (
   id uuid references auth.users on delete cascade primary key,
@@ -21,7 +32,7 @@ create table public.profiles (
 -- Customers: Telegram clients
 create table public.customers (
   id uuid primary key default uuid_generate_v4(),
-  telegram_id bigint not null unique,
+  telegram_id bigint not null,
   telegram_username text,
   first_name text,
   last_name text,
@@ -30,7 +41,9 @@ create table public.customers (
   has_paid boolean not null default false,
   uuid_landing text,
   last_activity timestamptz,
-  created_at timestamptz not null default now()
+  bot_id uuid not null references public.bots(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  unique(telegram_id, bot_id)
 );
 
 -- Conversations
@@ -42,6 +55,7 @@ create table public.conversations (
   last_message_at timestamptz default now(),
   waiting_since timestamptz,
   first_response_at timestamptz,
+  bot_id uuid not null references public.bots(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -69,6 +83,7 @@ create table public.transactions (
   status text not null default 'pending' check (status in ('pending', 'confirmed', 'rejected')),
   receipt_url text,
   notes text,
+  bot_id uuid not null references public.bots(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -79,6 +94,7 @@ create table public.auto_responses (
   response_text text not null,
   shortcut text,
   is_active boolean not null default true,
+  bot_id uuid references public.bots(id) on delete cascade,
   created_at timestamptz not null default now()
 );
 
@@ -97,15 +113,50 @@ create table public.conversation_labels (
   primary key (conversation_id, label_id)
 );
 
+-- Segmentation rules: Auto-assign labels to customers based on conditions
+create table public.segmentation_rules (
+  id uuid primary key default uuid_generate_v4(),
+  name text not null,
+  description text,
+  label_id uuid not null references public.labels(id) on delete cascade,
+  conditions jsonb not null default '[]',
+  is_active boolean not null default true,
+  auto_remove boolean not null default false,
+  bot_id uuid references public.bots(id) on delete cascade,
+  created_at timestamptz not null default now()
+);
+
+-- Customer-Label junction table
+create table public.customer_labels (
+  customer_id uuid not null references public.customers(id) on delete cascade,
+  label_id uuid not null references public.labels(id) on delete cascade,
+  assigned_by text not null default 'manual' check (assigned_by in ('manual', 'auto')),
+  rule_id uuid references public.segmentation_rules(id) on delete set null,
+  assigned_at timestamptz not null default now(),
+  primary key (customer_id, label_id)
+);
+
+-- Segmentation logs: Audit trail
+create table public.segmentation_logs (
+  id uuid primary key default uuid_generate_v4(),
+  rule_id uuid not null references public.segmentation_rules(id) on delete cascade,
+  customer_id uuid not null references public.customers(id) on delete cascade,
+  label_id uuid not null references public.labels(id) on delete cascade,
+  action text not null check (action in ('assigned', 'removed')),
+  created_at timestamptz not null default now()
+);
+
 -- Recontact rules: Auto-message inactive customers
 create table public.recontact_rules (
   id uuid primary key default uuid_generate_v4(),
   name text not null,
   description text,
-  condition_type text not null check (condition_type in ('inactive_days', 'no_payment', 'vip_inactive')),
+  condition_type text not null check (condition_type in ('inactive_days', 'no_payment', 'vip_inactive', 'by_label')),
   condition_days integer not null default 7,
   message_template text not null,
   is_active boolean not null default true,
+  bot_id uuid references public.bots(id) on delete cascade,
+  target_label_id uuid references public.labels(id) on delete set null,
   created_at timestamptz not null default now()
 );
 
@@ -114,6 +165,7 @@ create table public.recontact_logs (
   id uuid primary key default uuid_generate_v4(),
   rule_id uuid not null references public.recontact_rules(id) on delete cascade,
   customer_id uuid not null references public.customers(id) on delete cascade,
+  bot_id uuid not null references public.bots(id) on delete cascade,
   sent_at timestamptz not null default now()
 );
 
@@ -122,22 +174,31 @@ create table public.recontact_logs (
 -- ============================================
 
 create index idx_customers_telegram_id on public.customers(telegram_id);
+create index idx_customers_telegram_bot on public.customers(telegram_id, bot_id);
 create index idx_conversations_customer_id on public.conversations(customer_id);
 create index idx_conversations_agent_id on public.conversations(assigned_agent_id);
 create index idx_conversations_status on public.conversations(status);
 create index idx_conversations_last_message on public.conversations(last_message_at desc);
+create index idx_conversations_bot_id on public.conversations(bot_id);
 create index idx_messages_conversation_id on public.messages(conversation_id);
 create index idx_messages_created_at on public.messages(created_at);
 create index idx_messages_conversation_date on public.messages(conversation_id, created_at desc);
 create index idx_transactions_customer_id on public.transactions(customer_id);
 create index idx_transactions_status on public.transactions(status);
-create unique index idx_auto_responses_shortcut on public.auto_responses(shortcut) where shortcut is not null;
+create index idx_transactions_bot_id on public.transactions(bot_id);
+create unique index idx_auto_responses_shortcut on public.auto_responses(bot_id, shortcut) where shortcut is not null;
+create index idx_customer_labels_customer on public.customer_labels(customer_id);
+create index idx_customer_labels_label on public.customer_labels(label_id);
+create index idx_segmentation_rules_active on public.segmentation_rules(is_active) where is_active = true;
+create index idx_segmentation_logs_rule on public.segmentation_logs(rule_id);
+create index idx_segmentation_logs_customer on public.segmentation_logs(customer_id);
 create unique index idx_messages_unique_telegram_msg on public.messages(conversation_id, telegram_message_id) where telegram_message_id is not null;
 
 -- ============================================
 -- ROW LEVEL SECURITY
 -- ============================================
 
+alter table public.bots enable row level security;
 alter table public.profiles enable row level security;
 alter table public.customers enable row level security;
 alter table public.conversations enable row level security;
@@ -146,6 +207,9 @@ alter table public.transactions enable row level security;
 alter table public.auto_responses enable row level security;
 alter table public.labels enable row level security;
 alter table public.conversation_labels enable row level security;
+alter table public.segmentation_rules enable row level security;
+alter table public.customer_labels enable row level security;
+alter table public.segmentation_logs enable row level security;
 alter table public.recontact_rules enable row level security;
 alter table public.recontact_logs enable row level security;
 
@@ -176,6 +240,27 @@ set search_path = '';
 create trigger on_profile_role_change
   after update of role on public.profiles
   for each row execute function public.sync_role_to_jwt();
+
+-- BOTS policies (authenticated can view public fields, admins manage)
+create policy "Authenticated can view bots"
+  on public.bots for select
+  to authenticated
+  using (true);
+
+create policy "Admins can insert bots"
+  on public.bots for insert
+  to authenticated
+  with check (public.get_user_role() = 'admin');
+
+create policy "Admins can update bots"
+  on public.bots for update
+  to authenticated
+  using (public.get_user_role() = 'admin');
+
+create policy "Admins can delete bots"
+  on public.bots for delete
+  to authenticated
+  using (public.get_user_role() = 'admin');
 
 -- PROFILES policies
 create policy "Profiles are viewable by authenticated users"
@@ -306,6 +391,24 @@ create policy "Authenticated can view conversation_labels"
 create policy "Authenticated can manage conversation_labels"
   on public.conversation_labels for all to authenticated using (true);
 
+-- SEGMENTATION_RULES policies
+create policy "Authenticated can view segmentation_rules"
+  on public.segmentation_rules for select to authenticated using (true);
+create policy "Admins can manage segmentation_rules"
+  on public.segmentation_rules for all to authenticated using (public.get_user_role() = 'admin');
+
+-- CUSTOMER_LABELS policies
+create policy "Authenticated can view customer_labels"
+  on public.customer_labels for select to authenticated using (true);
+create policy "Authenticated can manage customer_labels"
+  on public.customer_labels for all to authenticated using (true);
+
+-- SEGMENTATION_LOGS policies
+create policy "Authenticated can view segmentation_logs"
+  on public.segmentation_logs for select to authenticated using (true);
+create policy "Authenticated can insert segmentation_logs"
+  on public.segmentation_logs for insert to authenticated with check (true);
+
 -- RECONTACT_RULES policies
 create policy "Authenticated can view recontact_rules"
   on public.recontact_rules for select to authenticated using (true);
@@ -387,3 +490,92 @@ set search_path = '';
 create trigger on_message_response_tracking
   after insert on public.messages
   for each row execute function public.update_response_tracking();
+
+-- ============================================
+-- RPC FUNCTIONS
+-- ============================================
+
+-- Evaluate a segmentation rule and return matching customer IDs
+create or replace function public.evaluate_segmentation_rule(p_rule_id uuid)
+returns table(customer_id uuid) as $$
+declare
+  v_rule record;
+  v_condition jsonb;
+  v_query text;
+  v_field text;
+  v_operator text;
+  v_value text;
+  v_sql_op text;
+  v_sql_expr text;
+begin
+  select * into v_rule from public.segmentation_rules where id = p_rule_id;
+
+  if v_rule is null then
+    return;
+  end if;
+
+  v_query := '
+    SELECT c.id as customer_id
+    FROM public.customers c
+    LEFT JOIN LATERAL (
+      SELECT
+        count(*) as tx_count,
+        coalesce(sum(amount), 0) as tx_total,
+        coalesce(avg(amount), 0) as tx_avg,
+        min(created_at) as first_tx
+      FROM public.transactions t
+      WHERE t.customer_id = c.id AND t.status = ''confirmed''
+    ) tx ON true
+    WHERE 1=1';
+
+  if v_rule.bot_id is not null then
+    v_query := v_query || ' AND c.bot_id = ' || quote_literal(v_rule.bot_id);
+  end if;
+
+  for v_condition in select * from jsonb_array_elements(v_rule.conditions)
+  loop
+    v_field := v_condition->>'field';
+    v_operator := v_condition->>'operator';
+    v_value := v_condition->>'value';
+
+    case v_operator
+      when 'eq' then v_sql_op := '=';
+      when 'neq' then v_sql_op := '!=';
+      when 'gt' then v_sql_op := '>';
+      when 'gte' then v_sql_op := '>=';
+      when 'lt' then v_sql_op := '<';
+      when 'lte' then v_sql_op := '<=';
+      else continue;
+    end case;
+
+    case v_field
+      when 'transaction_count' then
+        v_sql_expr := 'tx.tx_count';
+      when 'total_amount' then
+        v_sql_expr := 'tx.tx_total';
+      when 'avg_amount' then
+        v_sql_expr := 'tx.tx_avg';
+      when 'inactive_days' then
+        v_sql_expr := 'extract(epoch from (now() - c.last_activity)) / 86400';
+      when 'has_paid' then
+        v_sql_expr := 'c.has_paid';
+        v_value := case when v_value = 'true' then 'true' else 'false' end;
+        v_query := v_query || ' AND ' || v_sql_expr || ' ' || v_sql_op || ' ' || v_value;
+        continue;
+      when 'status' then
+        v_sql_expr := 'c.status';
+        v_query := v_query || ' AND ' || v_sql_expr || ' ' || v_sql_op || ' ' || quote_literal(v_value);
+        continue;
+      when 'days_since_first_tx' then
+        v_sql_expr := 'extract(epoch from (now() - tx.first_tx)) / 86400';
+      else
+        continue;
+    end case;
+
+    v_query := v_query || ' AND ' || v_sql_expr || ' ' || v_sql_op || ' ' || v_value;
+  end loop;
+
+  return query execute v_query;
+end;
+$$ language plpgsql security definer
+set search_path = '';

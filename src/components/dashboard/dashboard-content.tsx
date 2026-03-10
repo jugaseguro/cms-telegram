@@ -3,6 +3,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBotStore } from '@/stores/bot-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MessageSquare, Users, DollarSign, Clock } from 'lucide-react'
 import { DASHBOARD_CARDS_CONFIG } from '@/lib/constants'
@@ -18,18 +19,26 @@ interface Stats {
 
 export function DashboardContent() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
+  const selectedBotId = useBotStore((s) => s.selectedBotId)
 
   const { data: stats } = useQuery({
-    queryKey: ['dashboard-stats'],
+    queryKey: ['dashboard-stats', selectedBotId],
     enabled: isInitialized,
     queryFn: async (): Promise<Stats> => {
+      let convQuery = supabase.from('conversations').select('id', { count: 'exact', head: true })
+      let openQuery = supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'open')
+      let custQuery = supabase.from('customers').select('id', { count: 'exact', head: true })
+      let txQuery = supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending')
+
+      if (selectedBotId) {
+        convQuery = convQuery.eq('bot_id', selectedBotId)
+        openQuery = openQuery.eq('bot_id', selectedBotId)
+        custQuery = custQuery.eq('bot_id', selectedBotId)
+        txQuery = txQuery.eq('bot_id', selectedBotId)
+      }
+
       const [conversations, openConvs, customers, transactions] =
-        await Promise.all([
-          supabase.from('conversations').select('id', { count: 'exact', head: true }),
-          supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'open'),
-          supabase.from('customers').select('id', { count: 'exact', head: true }),
-          supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
-        ])
+        await Promise.all([convQuery, openQuery, custQuery, txQuery])
 
       return {
         totalConversations: conversations.count ?? 0,

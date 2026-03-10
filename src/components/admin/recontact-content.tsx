@@ -34,6 +34,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
+import { useLabels } from '@/hooks/use-labels'
 import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -42,10 +43,12 @@ const conditionLabels: Record<string, string> = {
   inactive_days: 'Inactivo (días)',
   no_payment: 'Sin pago',
   vip_inactive: 'VIP inactivo',
+  by_label: 'Por etiqueta',
 }
 
 export function RecontactContent() {
   const queryClient = useQueryClient()
+  const { data: allLabels } = useLabels()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<RecontactRule | null>(null)
   const [form, setForm] = useState({
@@ -54,6 +57,7 @@ export function RecontactContent() {
     condition_type: 'inactive_days' as RecontactRule['condition_type'],
     condition_days: 7,
     message_template: '',
+    target_label_id: '' as string,
   })
 
   const { data: rules, isLoading } = useQuery({
@@ -92,6 +96,9 @@ export function RecontactContent() {
         condition_type: data.condition_type,
         condition_days: data.condition_days,
         message_template: data.message_template,
+        target_label_id: data.condition_type === 'by_label' && data.target_label_id
+          ? data.target_label_id
+          : null as string | null,
       }
       if (editing) {
         const { error } = await supabase
@@ -149,6 +156,7 @@ export function RecontactContent() {
       condition_type: 'inactive_days',
       condition_days: 7,
       message_template: '',
+      target_label_id: '',
     })
     setDialogOpen(true)
   }
@@ -161,6 +169,7 @@ export function RecontactContent() {
       condition_type: rule.condition_type,
       condition_days: rule.condition_days,
       message_template: rule.message_template,
+      target_label_id: rule.target_label_id ?? '',
     })
     setDialogOpen(true)
   }
@@ -328,9 +337,9 @@ export function RecontactContent() {
                 <Label>Tipo de condición</Label>
                 <Select
                   value={form.condition_type}
-                  onValueChange={(v) =>
-                    setForm((f) => ({ ...f, condition_type: v as RecontactRule['condition_type'] }))
-                  }
+                  onValueChange={(v) => {
+                      if (v) setForm((f) => ({ ...f, condition_type: v as RecontactRule['condition_type'] }))
+                    }}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -339,6 +348,7 @@ export function RecontactContent() {
                     <SelectItem value="inactive_days">Inactivo (días)</SelectItem>
                     <SelectItem value="no_payment">Sin pago</SelectItem>
                     <SelectItem value="vip_inactive">VIP inactivo</SelectItem>
+                    <SelectItem value="by_label">Por etiqueta</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -355,6 +365,35 @@ export function RecontactContent() {
                 />
               </div>
             </div>
+            {form.condition_type === 'by_label' && (
+              <div className="space-y-2">
+                <Label>Etiqueta objetivo</Label>
+                <Select
+                  value={form.target_label_id}
+                  onValueChange={(v) => { if (v) setForm((prev) => ({ ...prev, target_label_id: v })) }}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar etiqueta..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {allLabels?.map((label) => (
+                      <SelectItem key={label.id} value={label.id}>
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full inline-block"
+                            style={{ backgroundColor: label.color }}
+                          />
+                          {label.name}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  Enviar a clientes con esta etiqueta que estén inactivos por los días configurados
+                </p>
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="rule-template">Mensaje template</Label>
               <Textarea

@@ -1,16 +1,16 @@
-import { Context } from 'grammy'
+import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
-export async function handlePhoto(ctx: Context) {
+export async function handlePhoto(ctx: BotContext) {
   const from = ctx.from
   const photo = ctx.message?.photo
   if (!from || !photo) return
 
-  const customer = await findOrCreateCustomer(from)
+  const customer = await findOrCreateCustomer(from, ctx.botId)
   if (!customer) return
 
-  const conversation = await findOrCreateConversation(customer.id)
+  const conversation = await findOrCreateConversation(customer.id, ctx.botId)
   if (!conversation) return
 
   // Dedup: skip before downloading file to save bandwidth
@@ -19,7 +19,7 @@ export async function handlePhoto(ctx: Context) {
   // Get highest resolution photo and resolve to downloadable URL
   const fileId = photo[photo.length - 1].file_id
   const file = await ctx.api.getFile(fileId)
-  const telegramUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`
+  const telegramUrl = `https://api.telegram.org/file/bot${ctx.botToken}/${file.file_path}`
   const caption = ctx.message?.caption || ''
 
   // Download from Telegram and upload to Supabase Storage

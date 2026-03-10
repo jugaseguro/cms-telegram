@@ -19,7 +19,10 @@ import {
   Tag,
   RefreshCw,
   LogOut,
+  Bot,
+  Layers,
 } from 'lucide-react'
+import { BotSelector } from './bot-selector'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -31,8 +34,10 @@ const navigation = [
 
 const adminNavigation = [
   { name: 'Agentes', href: '/admin/agents', icon: Shield },
+  { name: 'Bots', href: '/admin/bots', icon: Bot },
   { name: 'Respuestas auto', href: '/admin/auto-responses', icon: BotMessageSquare },
   { name: 'Etiquetas', href: '/admin/labels', icon: Tag },
+  { name: 'Segmentación', href: '/admin/segmentation', icon: Layers },
   { name: 'Recontacto', href: '/admin/recontact', icon: RefreshCw },
 ]
 
@@ -64,6 +69,11 @@ export function Sidebar() {
           <span className="text-[15px] font-bold tracking-tight">CRM Telegram</span>
           <span className="text-[10px] font-medium text-muted-foreground">Panel de gestión</span>
         </div>
+      </div>
+
+      {/* Bot selector */}
+      <div className="pt-3">
+        <BotSelector />
       </div>
 
       {/* Navigation */}

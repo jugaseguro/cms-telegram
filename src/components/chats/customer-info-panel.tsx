@@ -29,7 +29,17 @@ import {
   Plus,
   ChevronDown,
   ChevronUp,
+  Tag,
+  Zap,
+  Check,
 } from 'lucide-react'
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from '@/components/ui/popover'
+import { useCustomerLabels, useToggleCustomerLabel } from '@/hooks/use-customer-labels'
+import { useLabels } from '@/hooks/use-labels'
 import { CUSTOMER_STATUS_COLORS, TRANSACTION_STATUS_COLORS } from '@/lib/constants'
 import type { Customer, Transaction } from '@/lib/supabase/types'
 
@@ -52,6 +62,9 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
   const [showForm, setShowForm] = useState(false)
   const [showAllTx, setShowAllTx] = useState(false)
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
+  const { data: customerLabels } = useCustomerLabels(customer.id)
+  const { data: allLabels } = useLabels()
+  const toggleLabel = useToggleCustomerLabel()
 
   const { data: transactions } = useQuery({
     queryKey: ['customer-transactions', customer.id],
@@ -83,6 +96,7 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
         amount: parseFloat(data.amount),
         receipt_url: receiptUrl,
         notes: data.notes || null,
+        bot_id: customer.bot_id,
       })
       if (error) throw error
     },
@@ -164,6 +178,75 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
             Desde {format(new Date(customer.created_at), 'dd/MM/yyyy')}
           </span>
         </div>
+      </div>
+
+      <Separator />
+
+      {/* Etiquetas del cliente */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <h4 className="text-sm font-semibold flex items-center gap-1.5">
+            <Tag className="h-3.5 w-3.5" />
+            Etiquetas
+          </h4>
+          <Popover>
+            <PopoverTrigger
+              render={
+                <Button variant="ghost" size="icon" className="h-6 w-6">
+                  <Plus className="h-3.5 w-3.5" />
+                </Button>
+              }
+            />
+            <PopoverContent className="w-48 p-2" align="end">
+              <div className="space-y-1">
+                {allLabels?.length === 0 && (
+                  <p className="text-xs text-muted-foreground px-2 py-1">Sin etiquetas</p>
+                )}
+                {allLabels?.map((label) => {
+                  const isActive = customerLabels?.some((cl) => cl.label_id === label.id)
+                  return (
+                    <button
+                      key={label.id}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted cursor-pointer"
+                      onClick={() =>
+                        toggleLabel.mutate({
+                          customerId: customer.id,
+                          labelId: label.id,
+                          isActive: !!isActive,
+                        })
+                      }
+                    >
+                      <span
+                        className="h-2.5 w-2.5 rounded-full shrink-0"
+                        style={{ backgroundColor: label.color }}
+                      />
+                      <span className="flex-1 text-left">{label.name}</span>
+                      {isActive && <Check className="h-3 w-3 text-primary" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </PopoverContent>
+          </Popover>
+        </div>
+        {customerLabels && customerLabels.length > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {customerLabels.map((cl) => (
+              <span
+                key={cl.label_id}
+                className="inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-medium text-white"
+                style={{ backgroundColor: cl.labels.color }}
+              >
+                {cl.assigned_by === 'auto' && (
+                  <Zap className="h-2.5 w-2.5" />
+                )}
+                {cl.labels.name}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">Sin etiquetas asignadas</p>
+        )}
       </div>
 
       <Separator />

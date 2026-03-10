@@ -1,14 +1,12 @@
 import 'dotenv/config'
-import { createBot } from './bot'
-import { createServer, type IncomingMessage } from 'http'
+import { BotManager } from './bot-manager'
 import { startRecontactCron } from './cron/recontact'
+import { startSegmentationCron } from './cron/segmentation'
+import { createServer, type IncomingMessage } from 'http'
 
-const BOT_TOKEN = process.env.BOT_TOKEN!
 const PORT = parseInt(process.env.PORT || '3001')
 const WEBHOOK_URL = process.env.WEBHOOK_URL
 const MODE = process.env.MODE || 'polling' // 'polling' | 'webhook'
-
-const bot = createBot(BOT_TOKEN)
 
 function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -20,22 +18,37 @@ function readBody(req: IncomingMessage): Promise<string> {
 }
 
 async function start() {
+  const manager = new BotManager()
+  await manager.loadBots()
+
+  if (manager.getAllBots().size === 0) {
+    console.error('[main] No bots loaded. Exiting.')
+    process.exit(1)
+  }
+
   if (MODE === 'webhook' && WEBHOOK_URL) {
-    // Webhook mode (for Railway)
-    await bot.api.setWebhook(`${WEBHOOK_URL}/webhook`)
+    await manager.setupWebhooks(WEBHOOK_URL)
 
     const server = createServer(async (req, res) => {
-      if (req.url === '/webhook' && req.method === 'POST') {
-        // Read body and respond 200 immediately to prevent Telegram retries
+      // Route: /webhook/:botId
+      const match = req.url?.match(/^\/webhook\/([a-f0-9-]+)$/i)
+      if (match && req.method === 'POST') {
+        const botId = match[1]
+        const bot = manager.getBot(botId)
+
         const body = await readBody(req)
         res.writeHead(200)
         res.end()
 
-        // Process update in background
+        if (!bot) {
+          console.error(`[webhook] Unknown bot ID: ${botId}`)
+          return
+        }
+
         try {
           const update = JSON.parse(body)
           bot.handleUpdate(update).catch((err) => {
-            console.error(`Error processing update ${update.update_id}:`, err)
+            console.error(`Error processing update for bot ${botId}:`, err)
           })
         } catch (err) {
           console.error('Failed to parse webhook body:', err)
@@ -54,13 +67,16 @@ async function start() {
     })
   } else {
     // Polling mode (for development)
-    await bot.api.deleteWebhook()
-    console.log('Bot started in polling mode...')
-    bot.start()
+    console.log('Starting bots in polling mode...')
+    await manager.startPolling()
   }
 
-  // Start recontact cron job
-  startRecontactCron(bot)
+  // Watch for bot changes in realtime (hot add/remove/update)
+  manager.watchBotChanges()
+
+  // Start cron jobs for all bots
+  startRecontactCron(manager)
+  startSegmentationCron(manager)
 }
 
 start().catch(console.error)

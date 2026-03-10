@@ -3,13 +3,11 @@
 import { memo } from 'react'
 import { cn } from '@/lib/utils'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { Badge } from '@/components/ui/badge'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useChatStore } from '@/stores/chat-store'
-import { CircleDollarSign } from 'lucide-react'
+import { CircleDollarSign, User } from 'lucide-react'
 import { WaitingBadge } from './waiting-badge'
-import { CONVERSATION_STATUS_COLORS } from '@/lib/constants'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 interface ConversationItemProps {
@@ -25,6 +23,7 @@ export const ConversationItem = memo(function ConversationItem({
 }: ConversationItemProps) {
   const isUnread = useChatStore((s) => s.unreadConversationIds.has(conversation.id))
   const customer = conversation.customers
+  const bot = conversation.bots
   const name =
     [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
     customer.telegram_username ||
@@ -36,83 +35,113 @@ export const ConversationItem = memo(function ConversationItem({
     <button
       onClick={onClick}
       className={cn(
-        'flex w-full items-center gap-3 rounded-xl p-3 text-left transition-all duration-200 cursor-pointer',
+        'group flex w-full gap-3 rounded-xl p-3 text-left transition-all duration-200 cursor-pointer',
         isActive
-          ? 'bg-primary/10 shadow-sm shadow-primary/5'
+          ? 'bg-primary/10 shadow-sm shadow-primary/5 ring-1 ring-primary/15'
           : isUnread
-          ? 'bg-emerald-500/8 hover:bg-emerald-500/12'
-          : 'hover:bg-accent/60'
+          ? 'bg-emerald-500/6 hover:bg-emerald-500/10'
+          : 'hover:bg-accent/50'
       )}
     >
-      <div className="relative flex-shrink-0">
+      {/* Avatar */}
+      <div className="relative flex-shrink-0 mt-0.5">
         <Avatar className={cn(
-          'h-10 w-10 transition-all duration-200',
-          isUnread && 'ring-2 ring-emerald-500 ring-offset-1 ring-offset-background',
-          isActive && 'ring-2 ring-primary/30 ring-offset-1 ring-offset-background'
+          'h-11 w-11 transition-all duration-200',
+          isUnread && 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background',
+          isActive && 'ring-2 ring-primary/40 ring-offset-2 ring-offset-background'
         )}>
           <AvatarFallback className={cn(
-            'text-xs font-semibold',
-            isActive ? 'bg-primary/15 text-primary' : 'bg-muted'
+            'text-xs font-bold',
+            isActive
+              ? 'bg-primary/15 text-primary'
+              : isUnread
+              ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'
+              : 'bg-muted text-muted-foreground'
           )}>
             {initials}
           </AvatarFallback>
         </Avatar>
-        {isUnread && (
+        {isUnread && !customer.has_paid && (
           <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />
         )}
         {customer.has_paid && (
-          <span className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full border-2 border-background bg-green-500">
+          <span className="absolute -bottom-0.5 -right-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-background bg-green-500 shadow-sm">
             <CircleDollarSign className="h-2.5 w-2.5 text-white" />
           </span>
         )}
       </div>
-      <div className="flex-1 overflow-hidden">
+
+      {/* Content */}
+      <div className="flex-1 min-w-0 space-y-1">
+        {/* Row 1: Name + Time */}
         <div className="flex items-center justify-between gap-2">
-          <p className={cn('truncate text-sm', isUnread ? 'font-bold' : 'font-medium')}>
+          <p className={cn(
+            'truncate text-[13px] leading-tight',
+            isUnread ? 'font-bold text-foreground' : 'font-semibold text-foreground/90'
+          )}>
             {name}
           </p>
-          <Badge
-            variant="secondary"
-            className={cn('text-[10px] px-1.5 py-0 h-5 flex-shrink-0', CONVERSATION_STATUS_COLORS[conversation.status])}
-          >
-            {conversation.status}
-          </Badge>
-        </div>
-        {conversation.last_message_at && (
-          <p className={cn(
-            'text-xs mt-0.5',
-            isUnread ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
-          )} suppressHydrationWarning>
-            {formatDistanceToNow(new Date(conversation.last_message_at), {
-              addSuffix: true,
-              locale: es,
-            })}
-          </p>
-        )}
-        {conversation.profiles && (
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            Agente: {conversation.profiles.full_name}
-          </p>
-        )}
-        <div className="flex items-center gap-1 mt-1 flex-wrap">
-          {conversation.waiting_since && (
-            <WaitingBadge waitingSince={conversation.waiting_since} compact />
-          )}
-          {conversation.conversation_labels?.slice(0, 3).map((cl) => (
-            <span
-              key={cl.labels.id}
-              className="inline-flex items-center rounded-full px-1.5 py-0 text-[10px] font-medium text-white leading-4"
-              style={{ backgroundColor: cl.labels.color }}
-            >
-              {cl.labels.name}
-            </span>
-          ))}
-          {(conversation.conversation_labels?.length ?? 0) > 3 && (
-            <span className="text-[10px] text-muted-foreground">
-              +{(conversation.conversation_labels?.length ?? 0) - 3}
+          {conversation.last_message_at && (
+            <span className={cn(
+              'flex-shrink-0 text-[11px] tabular-nums',
+              isUnread ? 'font-semibold text-emerald-600 dark:text-emerald-400' : 'text-muted-foreground'
+            )} suppressHydrationWarning>
+              {formatDistanceToNow(new Date(conversation.last_message_at), {
+                addSuffix: false,
+                locale: es,
+              })}
             </span>
           )}
         </div>
+
+        {/* Row 2: Bot + Agent */}
+        {(bot || conversation.profiles) && (
+          <div className="flex items-center gap-1.5 text-[11px] leading-none">
+            {bot && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground">
+                <span
+                  className="h-2 w-2 rounded-full flex-shrink-0"
+                  style={{ backgroundColor: bot.color }}
+                />
+                <span className="truncate max-w-[70px]">{bot.name}</span>
+              </span>
+            )}
+
+            {bot && conversation.profiles && (
+              <span className="text-muted-foreground/40">|</span>
+            )}
+
+            {conversation.profiles && (
+              <span className="inline-flex items-center gap-1 text-muted-foreground truncate">
+                <User className="h-3 w-3 flex-shrink-0 opacity-60" />
+                <span className="truncate">{conversation.profiles.full_name}</span>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* Row 3: Labels + Waiting (only if present) */}
+        {((conversation.conversation_labels?.length ?? 0) > 0 || conversation.waiting_since) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {conversation.waiting_since && (
+              <WaitingBadge waitingSince={conversation.waiting_since} compact />
+            )}
+            {conversation.conversation_labels?.slice(0, 3).map((cl) => (
+              <span
+                key={cl.labels.id}
+                className="inline-flex items-center rounded-full px-1.5 py-px text-[10px] font-medium text-white leading-4"
+                style={{ backgroundColor: cl.labels.color }}
+              >
+                {cl.labels.name}
+              </span>
+            ))}
+            {(conversation.conversation_labels?.length ?? 0) > 3 && (
+              <span className="text-[10px] text-muted-foreground font-medium">
+                +{(conversation.conversation_labels?.length ?? 0) - 3}
+              </span>
+            )}
+          </div>
+        )}
       </div>
     </button>
   )

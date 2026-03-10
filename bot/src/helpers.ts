@@ -46,19 +46,24 @@ export async function insertMessageSafe(messageData: {
 }
 
 /**
- * Find existing customer by telegram_id or create a new one.
+ * Find existing customer by telegram_id + bot_id or create a new one.
  */
-export async function findOrCreateCustomer(from: {
-  id: number
-  username?: string
-  first_name: string
-  last_name?: string
-}, uuidLanding?: string): Promise<Customer | null> {
-  // Try to find existing customer
+export async function findOrCreateCustomer(
+  from: {
+    id: number
+    username?: string
+    first_name: string
+    last_name?: string
+  },
+  botId: string,
+  uuidLanding?: string
+): Promise<Customer | null> {
+  // Try to find existing customer for this bot
   const { data: existing } = await supabase
     .from('customers')
     .select('*')
     .eq('telegram_id', from.id)
+    .eq('bot_id', botId)
     .single()
 
   if (existing) {
@@ -96,6 +101,7 @@ export async function findOrCreateCustomer(from: {
       status: 'new',
       uuid_landing: uuidLanding || null,
       last_activity: new Date().toISOString(),
+      bot_id: botId,
     })
     .select()
     .single()
@@ -106,11 +112,15 @@ export async function findOrCreateCustomer(from: {
 /**
  * Find an open/pending conversation for a customer, or create a new one.
  */
-export async function findOrCreateConversation(customerId: string): Promise<Conversation | null> {
+export async function findOrCreateConversation(
+  customerId: string,
+  botId: string
+): Promise<Conversation | null> {
   const { data: existing } = await supabase
     .from('conversations')
     .select('*')
     .eq('customer_id', customerId)
+    .eq('bot_id', botId)
     .neq('status', 'closed')
     .order('created_at', { ascending: false })
     .limit(1)
@@ -125,6 +135,7 @@ export async function findOrCreateConversation(customerId: string): Promise<Conv
     .insert({
       customer_id: customerId,
       status: 'open',
+      bot_id: botId,
     })
     .select()
     .single()

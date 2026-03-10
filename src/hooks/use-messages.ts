@@ -101,10 +101,10 @@ export function useSendMessage() {
       // Skip Telegram delivery for internal notes
       if (isInternal) return message
 
-      // Get customer telegram_id to forward message
+      // Get customer telegram_id and bot_id to forward message
       const { data: conv } = await supabase
         .from('conversations')
-        .select('customer_id, customers(telegram_id)')
+        .select('customer_id, bot_id, customers(telegram_id)')
         .eq('id', conversationId)
         .single()
 
@@ -118,6 +118,7 @@ export function useSendMessage() {
             text: content || undefined,
             mediaUrl,
             messageType,
+            botId: conv?.bot_id,
           }),
         })
 

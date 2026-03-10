@@ -1,21 +1,29 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBotStore } from '@/stores/bot-store'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 const supabase = createClient()
 
 export function useConversations() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
+  const selectedBotId = useBotStore((s) => s.selectedBotId)
 
   return useQuery({
-    queryKey: ['conversations'],
+    queryKey: ['conversations', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('conversations')
-        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, created_at, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, created_at), profiles(id, full_name), conversation_labels(label_id, labels(*))')
+        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
         .order('last_message_at', { ascending: false })
+
+      if (selectedBotId) {
+        query = query.eq('bot_id', selectedBotId)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       return data as ConversationWithCustomerAndLabels[]

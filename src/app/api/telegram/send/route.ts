@@ -74,19 +74,15 @@ async function sendWithRetry(
 }
 
 export async function POST(request: Request) {
-  const { chatId, text, mediaUrl, messageType } = await request.json()
+  const { chatId, text, mediaUrl, messageType, botId } = await request.json()
 
   if (!chatId) {
     return NextResponse.json({ error: 'Missing chatId' }, { status: 400 })
   }
 
-  const BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
-  if (!BOT_TOKEN) {
-    return NextResponse.json({ error: 'Bot token not configured' }, { status: 500 })
-  }
+  const supabase = await createServerSupabaseClient()
 
   // Rate limit by agent (authenticated user)
-  const supabase = await createServerSupabaseClient()
   const { data: { user } } = await supabase.auth.getUser()
   const agentId = user?.id ?? 'anonymous'
 
@@ -109,7 +105,28 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing text' }, { status: 400 })
   }
 
-  const result = await sendWithRetry(BOT_TOKEN, { chatId, text, mediaUrl, messageType })
+  // Get bot token: from botId param, or fallback to env var for backwards compat
+  let botToken: string | undefined
+
+  if (botId) {
+    const { data: bot } = await supabase
+      .from('bots')
+      .select('token_encrypted')
+      .eq('id', botId)
+      .single()
+
+    botToken = bot?.token_encrypted
+  }
+
+  if (!botToken) {
+    botToken = process.env.TELEGRAM_BOT_TOKEN
+  }
+
+  if (!botToken) {
+    return NextResponse.json({ error: 'Bot token not configured' }, { status: 500 })
+  }
+
+  const result = await sendWithRetry(botToken, { chatId, text, mediaUrl, messageType })
 
   if (!result.ok) {
     return NextResponse.json(

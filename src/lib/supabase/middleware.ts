@@ -4,28 +4,6 @@ import { NextResponse, type NextRequest } from 'next/server'
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({ request })
 
-  // Security headers
-  const headers = supabaseResponse.headers
-  headers.set('X-Frame-Options', 'DENY')
-  headers.set('X-Content-Type-Options', 'nosniff')
-  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
-  headers.set('X-XSS-Protection', '1; mode=block')
-  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
-  headers.set(
-    'Content-Security-Policy',
-    [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
-      "style-src 'self' 'unsafe-inline'",
-      `connect-src 'self' ${process.env.NEXT_PUBLIC_SUPABASE_URL} wss://*.supabase.co https://api.telegram.org`,
-      "img-src 'self' data: blob: https://api.telegram.org https://*.supabase.co",
-      "font-src 'self' https://fonts.gstatic.com",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join('; ')
-  )
-
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -68,6 +46,15 @@ export async function updateSession(request: NextRequest) {
     url.pathname = '/'
     return NextResponse.redirect(url)
   }
+
+  // Security headers — set after Supabase operations so they persist
+  // even when cookies are refreshed and the response object is replaced
+  const headers = supabaseResponse.headers
+  headers.set('X-Frame-Options', 'DENY')
+  headers.set('X-Content-Type-Options', 'nosniff')
+  headers.set('Referrer-Policy', 'strict-origin-when-cross-origin')
+  headers.set('X-XSS-Protection', '1; mode=block')
+  headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()')
 
   return supabaseResponse
 }

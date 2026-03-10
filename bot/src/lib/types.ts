@@ -1,3 +1,13 @@
+export interface BotConfig {
+  id: string
+  name: string
+  token: string
+  telegram_username: string | null
+  is_active: boolean
+  color: string
+  welcome_message: string | null
+}
+
 export interface Customer {
   id: string
   telegram_id: number
@@ -8,6 +18,7 @@ export interface Customer {
   status: 'new' | 'active' | 'inactive'
   uuid_landing: string | null
   last_activity: string | null
+  bot_id: string
   created_at: string
 }
 
@@ -17,6 +28,7 @@ export interface Conversation {
   assigned_agent_id: string | null
   status: 'open' | 'closed' | 'pending'
   last_message_at: string | null
+  bot_id: string
   created_at: string
 }
 
@@ -37,5 +49,6 @@ export interface AutoResponse {
   trigger_text: string
   response_text: string
   is_active: boolean
+  bot_id: string | null
   created_at: string
 }

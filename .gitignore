@@ -46,3 +46,14 @@ squirrel.toml
 # misc
 nul
 skills-lock.json
+
+# bot compiled output
+bot/dist/
+
+# deploy scripts with server info
+bot/deploy.sh
+
+# claude local settings and skills
+.claude/settings.local.json
+.agents/
+.claude/skills/

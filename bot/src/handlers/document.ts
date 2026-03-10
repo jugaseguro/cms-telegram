@@ -1,16 +1,16 @@
-import { Context } from 'grammy'
+import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
-export async function handleDocument(ctx: Context) {
+export async function handleDocument(ctx: BotContext) {
   const from = ctx.from
   const document = ctx.message?.document
   if (!from || !document) return
 
-  const customer = await findOrCreateCustomer(from)
+  const customer = await findOrCreateCustomer(from, ctx.botId)
   if (!customer) return
 
-  const conversation = await findOrCreateConversation(customer.id)
+  const conversation = await findOrCreateConversation(customer.id, ctx.botId)
   if (!conversation) return
 
   // Dedup: skip before downloading file to save bandwidth
@@ -18,7 +18,7 @@ export async function handleDocument(ctx: Context) {
 
   // Resolve file_id to downloadable URL
   const file = await ctx.api.getFile(document.file_id)
-  const telegramUrl = `https://api.telegram.org/file/bot${process.env.BOT_TOKEN}/${file.file_path}`
+  const telegramUrl = `https://api.telegram.org/file/bot${ctx.botToken}/${file.file_path}`
   const caption = ctx.message?.caption || document.file_name || ''
 
   // Download from Telegram and upload to Supabase Storage

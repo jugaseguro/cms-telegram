@@ -4,16 +4,10 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMessages } from '@/hooks/use-messages'
 import { useRealtimeMessages } from '@/hooks/use-realtime'
-import { useAuthStore } from '@/stores/auth-store'
-import {
-  useAssignConversation,
-  useUpdateConversationStatus,
-} from '@/hooks/use-conversations'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
-import { UserPlus, XCircle, Loader2, User, CircleDollarSign, ArrowDown } from 'lucide-react'
+import { Loader2, User, CircleDollarSign, ArrowDown } from 'lucide-react'
 import { LabelPicker } from './label-picker'
 import { WaitingBadge } from './waiting-badge'
 import { useConversationLabels } from '@/hooks/use-labels'
@@ -36,10 +30,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
     fetchNextPage,
   } = useMessages(conversation.id)
   useRealtimeMessages(conversation.id)
-  const { user } = useAuthStore()
   const { data: conversationLabels } = useConversationLabels(conversation.id)
-  const assignMutation = useAssignConversation()
-  const statusMutation = useUpdateConversationStatus()
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -145,9 +136,17 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
             )}
           </h3>
           <div className="flex items-center gap-2 flex-wrap mt-1">
-            <Badge variant="outline" className="text-[11px] h-5">{conversation.status}</Badge>
             {conversation.waiting_since && (
               <WaitingBadge waitingSince={conversation.waiting_since} />
+            )}
+            {conversation.bots && (
+              <span className="inline-flex items-center gap-1 text-[11px] text-muted-foreground">
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{ backgroundColor: conversation.bots.color }}
+                />
+                via {conversation.bots.name}
+              </span>
             )}
             {conversation.profiles && (
               <span className="text-[11px] text-muted-foreground">
@@ -167,40 +166,6 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
           <LabelPicker conversationId={conversation.id} />
-          {!conversation.assigned_agent_id && user && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() =>
-                assignMutation.mutate({
-                  conversationId: conversation.id,
-                  agentId: user.id,
-                })
-              }
-              disabled={assignMutation.isPending}
-            >
-              <UserPlus className="mr-1.5 h-3.5 w-3.5" />
-              Agendar
-            </Button>
-          )}
-          {conversation.status === 'open' && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="h-8 text-xs"
-              onClick={() =>
-                statusMutation.mutate({
-                  conversationId: conversation.id,
-                  status: 'closed',
-                })
-              }
-              disabled={statusMutation.isPending}
-            >
-              <XCircle className="mr-1.5 h-3.5 w-3.5" />
-              Cerrar
-            </Button>
-          )}
           <Button
             variant="ghost"
             size="icon"

@@ -1,11 +1,10 @@
-import { Context } from 'grammy'
-import { supabase } from '../lib/supabase'
+import type { BotContext } from '../bot'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 
 // Matches a UUID-like code (e.g. "abc-123-def" or standard UUID)
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
 
-export async function handleStart(ctx: Context) {
+export async function handleStart(ctx: BotContext) {
   const from = ctx.from
   if (!from) return
 
@@ -15,11 +14,11 @@ export async function handleStart(ctx: Context) {
   const uuidLanding = match ? match[0] : undefined
 
   // Find or create customer
-  const customer = await findOrCreateCustomer(from, uuidLanding)
+  const customer = await findOrCreateCustomer(from, ctx.botId, uuidLanding)
   if (!customer) return
 
   // Find or create conversation
-  const conversation = await findOrCreateConversation(customer.id)
+  const conversation = await findOrCreateConversation(customer.id, ctx.botId)
   if (!conversation) return
 
   // Dedup: skip if this telegram message was already saved
@@ -35,9 +34,10 @@ export async function handleStart(ctx: Context) {
     telegram_message_id: ctx.message?.message_id || null,
   })
 
-  await ctx.reply(
+  const welcomeText = ctx.welcomeMessage ||
     '¡Bienvenido! 👋\n\n' +
     'Estás conectado con nuestro equipo de atención.\n' +
     'Escribe tu consulta y un agente te responderá a la brevedad.'
-  )
+
+  await ctx.reply(welcomeText)
 }

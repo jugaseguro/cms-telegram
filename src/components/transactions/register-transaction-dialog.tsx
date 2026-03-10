@@ -75,12 +75,15 @@ export function RegisterTransactionDialog({
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      // Look up the customer's bot_id
+      const customer = customers?.find((c) => c.id === data.customer_id)
       const { error } = await supabase.from('transactions').insert({
         customer_id: data.customer_id,
         agent_id: user!.id,
         amount: parseFloat(data.amount),
         receipt_url: receiptUrl,
         notes: data.notes || null,
+        bot_id: customer!.bot_id,
       })
       if (error) throw error
     },
