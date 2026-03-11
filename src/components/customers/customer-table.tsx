@@ -20,6 +20,7 @@ import { es } from 'date-fns/locale'
 import { Search, Eye, UsersRound } from 'lucide-react'
 import { TableSkeleton } from '@/components/ui/page-skeleton'
 import { CUSTOMER_STATUS_COLORS } from '@/lib/constants'
+import { useAuthStore } from '@/stores/auth-store'
 import type { Customer, Transaction } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -52,9 +53,11 @@ export function CustomerTable() {
   const [search, setSearch] = useState('')
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const { data: customers, isLoading } = useQuery({
     queryKey: ['customers'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('customers')
@@ -68,6 +71,7 @@ export function CustomerTable() {
 
   const { data: allTransactions } = useQuery({
     queryKey: ['all-transactions-for-customers'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('transactions')

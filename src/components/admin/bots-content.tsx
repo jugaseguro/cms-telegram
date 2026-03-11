@@ -17,6 +17,7 @@ import { BotFormDialog } from '@/components/admin/bot-form-dialog'
 import { format } from 'date-fns'
 import { Plus, Pencil, Power, PowerOff, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { useAuthStore } from '@/stores/auth-store'
 import type { BotPublic } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -25,9 +26,11 @@ export function BotsContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editBot, setEditBot] = useState<BotPublic | null>(null)
   const queryClient = useQueryClient()
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const { data: bots, isLoading } = useQuery({
     queryKey: ['admin-bots'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('bots')

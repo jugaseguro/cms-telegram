@@ -42,8 +42,11 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
   }, [])
 
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   const { data: autoResponses } = useQuery({
     queryKey: ['auto-responses-active'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('auto_responses')

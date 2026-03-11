@@ -35,6 +35,7 @@ import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useLabels } from '@/hooks/use-labels'
+import { useAuthStore } from '@/stores/auth-store'
 import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -48,6 +49,7 @@ const conditionLabels: Record<string, string> = {
 
 export function RecontactContent() {
   const queryClient = useQueryClient()
+  const isInitialized = useAuthStore((s) => s.isInitialized)
   const { data: allLabels } = useLabels()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<RecontactRule | null>(null)
@@ -62,6 +64,7 @@ export function RecontactContent() {
 
   const { data: rules, isLoading } = useQuery({
     queryKey: ['recontact-rules'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('recontact_rules')
@@ -74,6 +77,7 @@ export function RecontactContent() {
 
   const { data: logs } = useQuery({
     queryKey: ['recontact-logs'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('recontact_logs')

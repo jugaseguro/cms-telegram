@@ -16,6 +16,7 @@ import { Button } from '@/components/ui/button'
 import { AgentFormDialog } from '@/components/admin/agent-form-dialog'
 import { format } from 'date-fns'
 import { Plus, Pencil } from 'lucide-react'
+import { useAuthStore } from '@/stores/auth-store'
 import type { Profile } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -23,9 +24,11 @@ const supabase = createClient()
 export function AgentsContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editAgent, setEditAgent] = useState<Profile | null>(null)
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const { data: agents, isLoading } = useQuery({
     queryKey: ['agents'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('profiles')

@@ -17,6 +17,7 @@ import { Switch } from '@/components/ui/switch'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AutoResponseDialog } from './auto-response-dialog'
+import { useAuthStore } from '@/stores/auth-store'
 import type { AutoResponse } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -25,9 +26,11 @@ export function AutoResponsesContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<AutoResponse | null>(null)
   const queryClient = useQueryClient()
+  const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const { data: responses, isLoading } = useQuery({
     queryKey: ['auto-responses'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('auto_responses')

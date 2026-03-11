@@ -51,8 +51,11 @@ export function RegisterTransactionDialog({
   const queryClient = useQueryClient()
   const [receiptUrl, setReceiptUrl] = useState<string | null>(null)
 
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   const { data: customers } = useQuery({
     queryKey: ['customers'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('customers')

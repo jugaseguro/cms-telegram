@@ -47,8 +47,11 @@ export function TransactionTable() {
   const { profile } = useAuthStore()
   const queryClient = useQueryClient()
 
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   const { data: transactions, isLoading } = useQuery({
     queryKey: ['transactions', statusFilter],
+    enabled: isInitialized,
     queryFn: async () => {
       let query = supabase
         .from('transactions')
