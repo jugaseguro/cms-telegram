@@ -83,6 +83,13 @@ export function useRealtimeConversations(enabled = true) {
     }, 500)
   }, [queryClient])
 
+  // Stable ref so the callback can be used inside the effect without
+  // being listed as a dependency (avoids unnecessary subscription teardowns)
+  const debouncedRef = useRef(debouncedInvalidateConversations)
+  useEffect(() => {
+    debouncedRef.current = debouncedInvalidateConversations
+  }, [debouncedInvalidateConversations])
+
   useEffect(() => {
     if (!enabled) return
     isFirstSubscription.current = true
@@ -97,7 +104,7 @@ export function useRealtimeConversations(enabled = true) {
           table: 'conversations',
         },
         () => {
-          debouncedInvalidateConversations()
+          debouncedRef.current()
         }
       )
       .on(
@@ -122,7 +129,7 @@ export function useRealtimeConversations(enabled = true) {
             }
 
             playNotificationSound()
-            debouncedInvalidateConversations()
+            debouncedRef.current()
 
             // Refresh messages if this is the active conversation
             if (msg.conversation_id === activeId) {
@@ -140,8 +147,11 @@ export function useRealtimeConversations(enabled = true) {
             // Invalidate on first subscribe to ensure fresh data after auth
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
           } else {
+            // WebSocket reconnected — only refresh conversations list.
+            // Individual message queries are managed by useRealtimeMessages
+            // per conversation, so a global messages invalidation is not needed
+            // and would trigger many parallel fetches.
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
-            queryClient.invalidateQueries({ queryKey: ['messages'] })
             toast.success('Conexión restablecida', { duration: 3000 })
           }
           setStatus('connected')
@@ -156,5 +166,5 @@ export function useRealtimeConversations(enabled = true) {
       clearTimeout(debounceTimer.current)
       supabase.removeChannel(channel)
     }
-  }, [enabled, queryClient, markUnread, setStatus, debouncedInvalidateConversations])
+  }, [enabled, queryClient, markUnread, setStatus])
 }

@@ -48,6 +48,7 @@ export function useMessages(conversationId: string | null) {
     }),
     enabled: !!conversationId,
     staleTime: 30_000,
+    gcTime: 2 * 60 * 1000,
   })
 
   return {
