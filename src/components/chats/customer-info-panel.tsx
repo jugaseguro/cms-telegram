@@ -94,6 +94,7 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
         customer_id: customer.id,
         agent_id: user!.id,
         amount: parseFloat(data.amount),
+        status: 'confirmed',
         receipt_url: receiptUrl,
         notes: data.notes || null,
         bot_id: customer.bot_id,
