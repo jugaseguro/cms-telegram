@@ -23,7 +23,6 @@ export const useChatStore = create<ChatState>((set) => ({
   setSearchQuery: (query) => set({ searchQuery: query }),
   markUnread: (conversationId) =>
     set((state) => {
-      if (state.activeConversationId === conversationId) return state
       const next = new Set(state.unreadConversationIds)
       next.add(conversationId)
       return { unreadConversationIds: next }

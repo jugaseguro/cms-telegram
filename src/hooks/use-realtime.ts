@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { usePathname } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { useChatStore } from '@/stores/chat-store'
 import { useRealtimeStore } from '@/stores/realtime-store'
@@ -67,6 +68,9 @@ export function useRealtimeMessages(conversationId: string | null) {
 
 export function useRealtimeConversations(enabled = true) {
   const queryClient = useQueryClient()
+  const pathname = usePathname()
+  const pathnameRef = useRef(pathname)
+  pathnameRef.current = pathname
   const markUnread = useChatStore((s) => s.markUnread)
   const setStatus = useRealtimeStore((s) => s.setStatus)
   const isFirstSubscription = useRef(true)
@@ -109,11 +113,18 @@ export function useRealtimeConversations(enabled = true) {
             conversation_id?: string
           }
           if (msg.conversation_id) {
-            markUnread(msg.conversation_id)
+            const isOnChats = pathnameRef.current === '/chats'
+            const activeId = useChatStore.getState().activeConversationId
+
+            if (!isOnChats || msg.conversation_id !== activeId) {
+              // Mark as unread if user is not viewing this conversation
+              markUnread(msg.conversation_id)
+            }
+
             playNotificationSound()
             debouncedInvalidateConversations()
-            // Safety net: refresh messages only if this is the active conversation
-            const activeId = useChatStore.getState().activeConversationId
+
+            // Refresh messages if this is the active conversation
             if (msg.conversation_id === activeId) {
               queryClient.invalidateQueries({
                 queryKey: ['messages', msg.conversation_id],
