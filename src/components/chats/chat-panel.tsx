@@ -24,7 +24,6 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
   const {
     data: messages,
     isLoading,
-    isFetching,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
@@ -199,7 +198,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
             </Button>
           </div>
         )}
-        {isFetching && !messages?.length && (
+        {isLoading && (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
           </div>
