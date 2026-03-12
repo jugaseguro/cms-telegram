@@ -44,8 +44,19 @@ async function processSegmentation(manager: BotManager) {
       const matchingIds = new Set((matchingCustomers ?? []).map((c: { customer_id: string }) => c.customer_id))
       console.log(`[segmentation] Rule "${rule.name}": ${matchingIds.size} matching customers`)
 
-      // Assign label to matching customers (ON CONFLICT DO NOTHING)
+      // Fetch customers who already have this label assigned by this rule
+      const { data: existingLabels } = await supabase
+        .from('customer_labels')
+        .select('customer_id')
+        .eq('label_id', rule.label_id)
+        .eq('rule_id', rule.id)
+
+      const alreadyAssigned = new Set((existingLabels ?? []).map((l) => l.customer_id))
+
+      // Assign label only to NEW matching customers
       for (const customerId of matchingIds) {
+        if (alreadyAssigned.has(customerId)) continue
+
         const { error: insertError } = await supabase
           .from('customer_labels')
           .upsert(
@@ -58,12 +69,9 @@ async function processSegmentation(manager: BotManager) {
             { onConflict: 'customer_id,label_id', ignoreDuplicates: true }
           )
 
-        if (insertError) {
-          // Might already exist with manual assignment, that's fine
-          continue
-        }
+        if (insertError) continue
 
-        // Log assignment
+        // Log assignment only for genuinely new assignments
         await supabase.from('segmentation_logs').insert({
           rule_id: rule.id,
           customer_id: customerId,
