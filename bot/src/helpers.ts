@@ -32,6 +32,7 @@ export async function insertMessageSafe(messageData: {
   message_type: string
   media_url?: string
   telegram_message_id?: number | null
+  is_sensitive?: boolean
 }): Promise<boolean> {
   const { error } = await supabase.from('messages').insert(messageData)
 

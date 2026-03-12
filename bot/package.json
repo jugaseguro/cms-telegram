@@ -10,9 +10,11 @@
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.0",
+    "axios": "^1.13.6",
     "dotenv": "^16.4.7",
     "grammy": "^1.30.0",
     "node-cron": "^4.2.1",
+    "openai": "^6.27.0",
     "ws": "^8.19.0"
   },
   "devDependencies": {

@@ -134,6 +134,7 @@ export type Database = {
           first_response_at: string | null
           bot_id: string
           created_at: string
+          ai_paused: boolean
         }
         Insert: {
           id?: string
@@ -145,6 +146,7 @@ export type Database = {
           first_response_at?: string | null
           bot_id: string
           created_at?: string
+          ai_paused?: boolean
         }
         Update: {
           id?: string
@@ -155,6 +157,7 @@ export type Database = {
           waiting_since?: string | null
           first_response_at?: string | null
           bot_id?: string
+          ai_paused?: boolean
         }
         Relationships: [
           {
@@ -570,6 +573,56 @@ export type Database = {
           }
         ]
       }
+      ai_usage_logs: {
+        Row: {
+          id: string
+          conversation_id: string | null
+          bot_id: string | null
+          model: string
+          prompt_tokens: number
+          completion_tokens: number
+          total_tokens: number
+          cost_usd: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id?: string | null
+          bot_id?: string | null
+          model: string
+          prompt_tokens?: number
+          completion_tokens?: number
+          total_tokens?: number
+          cost_usd?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string | null
+          bot_id?: string | null
+          model?: string
+          prompt_tokens?: number
+          completion_tokens?: number
+          total_tokens?: number
+          cost_usd?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_logs_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_usage_logs_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
       recontact_logs: {
         Row: {
           id: string
@@ -666,6 +719,13 @@ export type RecontactLog = Database['public']['Tables']['recontact_logs']['Row']
 export type SegmentationRule = Database['public']['Tables']['segmentation_rules']['Row']
 export type CustomerLabel = Database['public']['Tables']['customer_labels']['Row']
 export type SegmentationLog = Database['public']['Tables']['segmentation_logs']['Row']
+
+export type AiUsageLog = Database['public']['Tables']['ai_usage_logs']['Row']
+
+export type AiUsageLogWithDetails = AiUsageLog & {
+  conversations: { customers: Pick<Customer, 'first_name' | 'last_name' | 'telegram_username'> } | null
+  bots: Pick<BotPublic, 'id' | 'name' | 'color'> | null
+}
 
 export type SegmentationRuleWithLabel = SegmentationRule & {
   labels: Label

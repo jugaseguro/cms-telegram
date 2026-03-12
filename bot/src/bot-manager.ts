@@ -11,7 +11,7 @@ export class BotManager {
   async loadBots(): Promise<void> {
     const { data, error } = await supabase
       .from('bots')
-      .select('id, name, token_encrypted, telegram_username, is_active, color, welcome_message')
+      .select('id, name, token_encrypted, telegram_username, is_active, color, welcome_message, ai_enabled, ai_system_prompt, ai_model, ai_max_history, casino_operator')
       .eq('is_active', true)
 
     if (error) {
@@ -33,9 +33,23 @@ export class BotManager {
         is_active: row.is_active,
         color: row.color,
         welcome_message: row.welcome_message,
+        ai_enabled: row.ai_enabled ?? false,
+        ai_system_prompt: row.ai_system_prompt ?? null,
+        ai_model: row.ai_model ?? 'gpt-4o-mini',
+        ai_max_history: row.ai_max_history ?? 8,
+        casino_operator: row.casino_operator ?? null,
       }
 
-      const bot = createBot(config.token, config.id, config.welcome_message)
+      const bot = createBot(
+        config.token,
+        config.id,
+        config.welcome_message,
+        config.ai_enabled,
+        config.ai_system_prompt,
+        config.ai_model,
+        config.ai_max_history,
+        config.casino_operator
+      )
       this.bots.set(config.id, { bot, config })
       console.log(`[bot-manager] Loaded bot: ${config.name} (${config.id})`)
     }
@@ -92,6 +106,11 @@ export class BotManager {
     is_active: boolean
     color: string
     welcome_message?: string | null
+    ai_enabled?: boolean
+    ai_system_prompt?: string | null
+    ai_model?: string
+    ai_max_history?: number
+    casino_operator?: string | null
   }): Promise<void> {
     if (this.bots.has(row.id)) return // already running
 
@@ -103,9 +122,23 @@ export class BotManager {
       is_active: row.is_active,
       color: row.color,
       welcome_message: row.welcome_message ?? null,
+      ai_enabled: row.ai_enabled ?? false,
+      ai_system_prompt: row.ai_system_prompt ?? null,
+      ai_model: row.ai_model ?? 'gpt-4o',
+      ai_max_history: row.ai_max_history ?? 15,
+      casino_operator: row.casino_operator ?? null,
     }
 
-    const bot = createBot(config.token, config.id)
+    const bot = createBot(
+      config.token,
+      config.id,
+      config.welcome_message,
+      config.ai_enabled,
+      config.ai_system_prompt,
+      config.ai_model,
+      config.ai_max_history,
+      config.casino_operator
+    )
     this.bots.set(config.id, { bot, config })
 
     try {
@@ -148,6 +181,11 @@ export class BotManager {
     is_active: boolean
     color: string
     welcome_message?: string | null
+    ai_enabled?: boolean
+    ai_system_prompt?: string | null
+    ai_model?: string
+    ai_max_history?: number
+    casino_operator?: string | null
   }): Promise<void> {
     await this.removeBot(row.id)
     if (row.is_active) {
@@ -197,13 +235,18 @@ export class BotManager {
               return
             }
 
-            // Name/color/username changed → just update config in memory
+            // Name/color/username/AI config changed → just update config in memory
             if (isRunning) {
               const entry = this.bots.get(row.id)!
               entry.config.name = row.name
               entry.config.color = row.color
               entry.config.telegram_username = row.telegram_username
               entry.config.welcome_message = row.welcome_message ?? null
+              entry.config.ai_enabled = row.ai_enabled ?? false
+              entry.config.ai_system_prompt = row.ai_system_prompt ?? null
+              entry.config.ai_model = row.ai_model ?? 'gpt-4o'
+              entry.config.ai_max_history = row.ai_max_history ?? 15
+              entry.config.casino_operator = row.casino_operator ?? null
               // Update welcome message on the bot instance without restart
               ;(entry.bot as any).setWelcomeMessage?.(entry.config.welcome_message)
               console.log(`[bot-manager] Config updated for: ${row.name}`)

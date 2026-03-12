@@ -7,11 +7,13 @@ import { useRealtimeMessages } from '@/hooks/use-realtime'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
 import { Button } from '@/components/ui/button'
-import { Loader2, User, CircleDollarSign, ArrowDown } from 'lucide-react'
+import { Loader2, User, CircleDollarSign, ArrowDown, BotOff, Bot } from 'lucide-react'
 import { LabelPicker } from './label-picker'
 import { WaitingBadge } from './waiting-badge'
 import { useConversationLabels } from '@/hooks/use-labels'
+import { useToggleAiPaused } from '@/hooks/use-conversations'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
+import { toast } from 'sonner'
 
 const VIRTUALIZATION_THRESHOLD = 200
 
@@ -30,6 +32,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
   } = useMessages(conversation.id)
   useRealtimeMessages(conversation.id)
   const { data: conversationLabels } = useConversationLabels(conversation.id)
+  const toggleAiPaused = useToggleAiPaused()
 
   const scrollContainerRef = useRef<HTMLDivElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -165,6 +168,25 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
           <LabelPicker conversationId={conversation.id} />
+          <Button
+            variant={conversation.ai_paused ? 'destructive' : 'ghost'}
+            size="icon"
+            className="h-8 w-8 rounded-lg"
+            title={conversation.ai_paused ? 'Bot pausado — click para reanudar' : 'Pausar bot para esta conversación'}
+            disabled={toggleAiPaused.isPending}
+            onClick={() => {
+              const next = !conversation.ai_paused
+              toggleAiPaused.mutate(
+                { conversationId: conversation.id, aiPaused: next },
+                {
+                  onSuccess: () => toast.success(next ? 'Bot pausado para esta conversación' : 'Bot reactivado'),
+                  onError: () => toast.error('No se pudo cambiar el estado del bot'),
+                }
+              )
+            }}
+          >
+            {conversation.ai_paused ? <BotOff className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
+          </Button>
           <Button
             variant="ghost"
             size="icon"

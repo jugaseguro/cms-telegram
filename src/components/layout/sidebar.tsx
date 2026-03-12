@@ -21,6 +21,7 @@ import {
   LogOut,
   Bot,
   Layers,
+  Sparkles,
 } from 'lucide-react'
 import { BotSelector } from './bot-selector'
 
@@ -39,6 +40,7 @@ const adminNavigation = [
   { name: 'Etiquetas', href: '/admin/labels', icon: Tag },
   { name: 'Segmentación', href: '/admin/segmentation', icon: Layers },
   { name: 'Recontacto', href: '/admin/recontact', icon: RefreshCw },
+  { name: 'Costos IA', href: '/admin/ai-costs', icon: Sparkles },
 ]
 
 export function Sidebar() {

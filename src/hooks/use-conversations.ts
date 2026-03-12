@@ -16,7 +16,7 @@ export function useConversations() {
     queryFn: async () => {
       let query = supabase
         .from('conversations')
-        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
+        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
         .order('last_message_at', { ascending: false })
 
       if (selectedBotId) {
@@ -45,6 +45,29 @@ export function useAssignConversation() {
       const { error } = await supabase
         .from('conversations')
         .update({ assigned_agent_id: agentId })
+        .eq('id', conversationId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
+    },
+  })
+}
+
+export function useToggleAiPaused() {
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: async ({
+      conversationId,
+      aiPaused,
+    }: {
+      conversationId: string
+      aiPaused: boolean
+    }) => {
+      const { error } = await supabase
+        .from('conversations')
+        .update({ ai_paused: aiPaused })
         .eq('id', conversationId)
       if (error) throw error
     },
