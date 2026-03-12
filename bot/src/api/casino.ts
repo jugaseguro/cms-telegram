@@ -67,33 +67,40 @@ export async function loginCasino(
 
 export interface RegisterParams {
   username: string
+  email: string
   password: string
-  telegramId: number
-  telegramUsername: string | undefined
   operator: string
 }
 
-export async function registerCasino(params: RegisterParams): Promise<LoginResult | null> {
+export interface RegisterResult {
+  verificationEmailSent: boolean
+}
+
+export async function registerCasino(params: RegisterParams): Promise<RegisterResult> {
   try {
     const response = await axios.post(
       REGISTER_URL,
       {
-        username: params.username,
-        password: params.password,
         operator: params.operator,
-        telegramId: params.telegramId,
-        telegramUsername: params.telegramUsername,
+        user: {
+          username: params.username,
+          email: params.email,
+          password: params.password,
+        },
       },
       { headers: HEADERS, timeout: TIMEOUT }
     )
 
-    const data = response.data?.data
-    if (!data?.token || !data?.profile) return null
+    const code = response.data?.code
+    if (code === 'users.register.verification_email_sent') {
+      return { verificationEmailSent: true }
+    }
 
-    return { jwt: data.token, profile: data.profile }
+    return { verificationEmailSent: false }
   } catch (err: any) {
-    if (err.response?.status === 409) throw new Error('casino_user_exists')
-    return null
+    const code = err.response?.data?.code
+    if (code === 'users.register.user_already_exists') throw new Error('casino_user_exists')
+    return { verificationEmailSent: false }
   }
 }
 
@@ -159,7 +166,7 @@ export async function createDeposit(
 export interface WithdrawParams {
   amount: number
   cbu: string
-  cuit: string
+  cuitl: string
   accountHolder: string
 }
 
@@ -171,7 +178,7 @@ export async function createWithdrawal(
     const payload = {
       amount: params.amount,
       cbu: params.cbu,
-      cuit: params.cuit,
+      cuitl: params.cuitl,
       accountHolder: params.accountHolder,
       currency: 'ARS',
     }
