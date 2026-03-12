@@ -34,6 +34,11 @@ export function useBots() {
   useEffect(() => {
     if (query.data) {
       setBots(query.data)
+      // If the stored selectedBotId no longer matches an active bot, reset to "all bots"
+      const currentBotId = useBotStore.getState().selectedBotId
+      if (currentBotId && !query.data.some((b) => b.id === currentBotId)) {
+        useBotStore.getState().selectBot(null)
+      }
     }
   }, [query.data, setBots])
 

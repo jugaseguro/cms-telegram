@@ -26,11 +26,11 @@ export default function DashboardLayout({
 }) {
   const { setUser, setProfile, setInitialized, isInitialized } = useAuthStore()
   const router = useRouter()
-  const hasSignedOut = useRef(false)
+  const signOutInProgress = useRef(false)
 
   const handleSessionExpired = useCallback(() => {
-    if (hasSignedOut.current) return
-    hasSignedOut.current = true
+    if (signOutInProgress.current) return
+    signOutInProgress.current = true
 
     toast.error('Tu sesión ha expirado. Redirigiendo al login...', {
       duration: 4000,
@@ -39,6 +39,7 @@ export default function DashboardLayout({
     // Give the toast time to show before redirecting
     setTimeout(() => {
       supabase.auth.signOut().finally(() => {
+        signOutInProgress.current = false
         router.push('/login')
         router.refresh()
       })
@@ -71,6 +72,11 @@ export default function DashboardLayout({
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        // Initial auth is handled by loadUser() with server-validated getUser().
+        // Ignoring INITIAL_SESSION prevents a race where a stale local session
+        // (null) overwrites the correct user state set by loadUser().
+        if (event === 'INITIAL_SESSION') return
+
         // Handle token refresh failure or explicit sign out
         if (event === 'TOKEN_REFRESHED' && !session) {
           handleSessionExpired()
@@ -80,7 +86,7 @@ export default function DashboardLayout({
         if (event === 'SIGNED_OUT') {
           setUser(null)
           setProfile(null)
-          if (!hasSignedOut.current) {
+          if (!signOutInProgress.current) {
             handleSessionExpired()
           }
           return
@@ -100,25 +106,12 @@ export default function DashboardLayout({
       }
     )
 
-    // Periodic session check: verify the token is still valid
+    // Periodic session check: server-validated via getUser() which also
+    // triggers an automatic token refresh if needed.
     const intervalId = setInterval(async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) {
+      const { data: { user: currentUser }, error } = await supabase.auth.getUser()
+      if (error || !currentUser) {
         handleSessionExpired()
-        return
-      }
-
-      // Check if token expires within the next 60 seconds
-      const expiresAt = session.expires_at
-      if (expiresAt) {
-        const now = Math.floor(Date.now() / 1000)
-        if (expiresAt < now) {
-          // Token already expired, try to refresh
-          const { error } = await supabase.auth.refreshSession()
-          if (error) {
-            handleSessionExpired()
-          }
-        }
       }
     }, SESSION_CHECK_INTERVAL)
 
@@ -127,6 +120,29 @@ export default function DashboardLayout({
       clearInterval(intervalId)
     }
   }, [setUser, setProfile, setInitialized, handleSessionExpired])
+
+  // Re-validate auth when the user returns to the tab (e.g. after being away
+  // long enough for the session to expire). Throttled to at most once per 30s.
+  useEffect(() => {
+    let lastCheck = Date.now()
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      if (Date.now() - lastCheck < 30_000) return
+      lastCheck = Date.now()
+
+      supabase.auth.getUser().then(({ data: { user }, error }) => {
+        if (error || !user) {
+          handleSessionExpired()
+          return
+        }
+        setUser(user)
+      })
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [handleSessionExpired, setUser])
 
   return (
     <div className="flex h-screen overflow-hidden">
