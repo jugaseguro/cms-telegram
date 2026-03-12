@@ -170,6 +170,67 @@ export async function handleTextMessage(ctx: BotContext) {
     return
   }
 
+  // -------------------------------------------------------
+  // Handle agent confirmation response
+  // -------------------------------------------------------
+  if (conversation.pending_action?.type === 'awaiting_agent_confirmation') {
+    const lower = text.toLowerCase().trim()
+
+    const YES_PATTERNS = /^(s[ií]|si|sí|dale|ok|okey|bueno|por\s*favor|quiero|agente|humano|seguro|claro|obvio|ya|sip|sep|afirmativo|porfa|porfavor|por\s*fa)/
+    const NO_PATTERNS = /^(no|nah|nel|segu[ií]|continua|continú?a|cancel|mejor\s*no|dejá|deja|nop|paso|na)/
+
+    if (YES_PATTERNS.test(lower)) {
+      await supabase
+        .from('conversations')
+        .update({ status: 'waiting_agent', ai_paused: true, pending_action: null })
+        .eq('id', conversation.id)
+
+      await insertMessageSafe({
+        conversation_id: conversation.id,
+        sender_type: 'customer',
+        sender_id: String(from.id),
+        content: text,
+        message_type: 'text',
+        telegram_message_id: ctx.message?.message_id || null,
+      })
+
+      await sendBotReply(ctx, conversation.id, 'Listo, ya te conecto con un agente. En breve alguien te va a atender. ¡Gracias por tu paciencia!')
+      return
+    }
+
+    if (NO_PATTERNS.test(lower)) {
+      await supabase
+        .from('conversations')
+        .update({ pending_action: null })
+        .eq('id', conversation.id)
+
+      await insertMessageSafe({
+        conversation_id: conversation.id,
+        sender_type: 'customer',
+        sender_id: String(from.id),
+        content: text,
+        message_type: 'text',
+        telegram_message_id: ctx.message?.message_id || null,
+      })
+
+      await sendBotReply(ctx, conversation.id, 'Perfecto, seguimos acá. ¿En qué más puedo ayudarte?')
+      return
+    }
+
+    // Ambiguous — ask again
+    await insertMessageSafe({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      sender_id: String(from.id),
+      content: text,
+      message_type: 'text',
+      telegram_message_id: ctx.message?.message_id || null,
+    })
+
+    await sendBotReply(ctx, conversation.id, 'No te entendí bien. ¿Querés que te conecte con un agente humano? Respondé "sí" o "no".')
+    return
+  }
+
   // Save customer message (normal flow — not a password)
   await insertMessageSafe({
     conversation_id: conversation.id,
@@ -392,10 +453,10 @@ export async function handleTextMessage(ctx: BotContext) {
       if (name === 'transfer_to_agent') {
         await supabase
           .from('conversations')
-          .update({ status: 'pending' })
+          .update({ pending_action: { type: 'awaiting_agent_confirmation' } })
           .eq('id', conversation.id)
 
-        await sendBotReply(ctx, conversation.id, 'Voy a conectarte con un agente. En breve alguien te va a atender. ¡Gracias por tu paciencia!')
+        await sendBotReply(ctx, conversation.id, '¿Estás seguro de que querés hablar con un agente humano? Puedo seguir ayudándote yo si preferís 😊')
         return
       }
     } catch (err) {

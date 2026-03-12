@@ -73,20 +73,30 @@ export function TransactionTable() {
     mutationFn: async ({
       id,
       status,
+      customerId,
     }: {
       id: string
       status: 'confirmed' | 'rejected'
+      customerId: string
     }) => {
       const { error } = await supabase
         .from('transactions')
         .update({ status })
         .eq('id', id)
       if (error) throw error
+
+      // If the customer has a conversation stuck in 'pending', move it back to 'open'
+      await supabase
+        .from('conversations')
+        .update({ status: 'open' })
+        .eq('customer_id', customerId)
+        .eq('status', 'pending')
     },
     onSuccess: () => {
       toast.success('Estado actualizado')
       queryClient.invalidateQueries({ queryKey: ['transactions'] })
       queryClient.invalidateQueries({ queryKey: ['customers'] })
+      queryClient.invalidateQueries({ queryKey: ['conversations'] })
     },
   })
 
@@ -194,6 +204,7 @@ export function TransactionTable() {
                             updateStatus.mutate({
                               id: tx.id,
                               status: 'confirmed',
+                              customerId: tx.customer_id,
                             })
                           }
                         >
@@ -206,6 +217,7 @@ export function TransactionTable() {
                             updateStatus.mutate({
                               id: tx.id,
                               status: 'rejected',
+                              customerId: tx.customer_id,
                             })
                           }
                         >
