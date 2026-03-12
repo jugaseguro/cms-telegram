@@ -6,9 +6,15 @@ import { useChatStore } from '@/stores/chat-store'
 import { useRealtimeStore } from '@/stores/realtime-store'
 import { playNotificationSound } from '@/lib/notification-sound'
 import { toast } from 'sonner'
+import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Message } from '@/lib/supabase/types'
 
 const supabase = createClient()
+
+/** Minimum gap between visibility-triggered reconnection attempts */
+const RECONNECT_THROTTLE_MS = 10_000
+/** If the channel stays in reconnecting state for this long, force a full teardown */
+const STUCK_CHANNEL_TIMEOUT_MS = 30_000
 
 export function useRealtimeMessages(conversationId: string | null) {
   const queryClient = useQueryClient()
@@ -75,6 +81,9 @@ export function useRealtimeConversations(enabled = true) {
   const setStatus = useRealtimeStore((s) => s.setStatus)
   const isFirstSubscription = useRef(true)
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const channelRef = useRef<RealtimeChannel | null>(null)
+  const lastReconnectAttempt = useRef(0)
+  const stuckTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const debouncedInvalidateConversations = useCallback(() => {
     clearTimeout(debounceTimer.current)
@@ -89,6 +98,34 @@ export function useRealtimeConversations(enabled = true) {
   useEffect(() => {
     debouncedRef.current = debouncedInvalidateConversations
   }, [debouncedInvalidateConversations])
+
+  // Visibility-based reconnection: when the user returns to the tab,
+  // check if the realtime channel is healthy and force reconnect if not.
+  useEffect(() => {
+    if (!enabled) return
+
+    function handleVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+
+      const now = Date.now()
+      if (now - lastReconnectAttempt.current < RECONNECT_THROTTLE_MS) return
+
+      const channel = channelRef.current
+      if (!channel) return
+
+      // If the channel is not in SUBSCRIBED state, force a resubscribe
+      const state = channel.state
+      if (state !== 'joined') {
+        lastReconnectAttempt.current = now
+        channel.unsubscribe().then(() => {
+          channel.subscribe()
+        })
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
+  }, [enabled])
 
   useEffect(() => {
     if (!enabled) return
@@ -142,6 +179,9 @@ export function useRealtimeConversations(enabled = true) {
       )
       .subscribe((status) => {
         if (status === 'SUBSCRIBED') {
+          // Clear stuck-channel timer on successful subscription
+          clearTimeout(stuckTimer.current)
+
           if (isFirstSubscription.current) {
             isFirstSubscription.current = false
             // Invalidate on first subscribe to ensure fresh data after auth
@@ -157,13 +197,29 @@ export function useRealtimeConversations(enabled = true) {
           setStatus('connected')
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           setStatus('reconnecting')
+
+          // Safety: if stuck in reconnecting for too long, force a full
+          // channel teardown and resubscribe to recover from dead connections.
+          clearTimeout(stuckTimer.current)
+          stuckTimer.current = setTimeout(() => {
+            const ch = channelRef.current
+            if (ch && ch.state !== 'joined') {
+              ch.unsubscribe().then(() => {
+                ch.subscribe()
+              })
+            }
+          }, STUCK_CHANNEL_TIMEOUT_MS)
         } else if (status === 'CLOSED') {
           setStatus('disconnected')
         }
       })
 
+    channelRef.current = channel
+
     return () => {
       clearTimeout(debounceTimer.current)
+      clearTimeout(stuckTimer.current)
+      channelRef.current = null
       supabase.removeChannel(channel)
     }
   }, [enabled, queryClient, markUnread, setStatus])

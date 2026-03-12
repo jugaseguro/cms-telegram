@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
+import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { Sidebar } from '@/components/layout/sidebar'
@@ -26,6 +27,7 @@ export default function DashboardLayout({
 }) {
   const { setUser, setProfile, setInitialized, isInitialized } = useAuthStore()
   const router = useRouter()
+  const queryClient = useQueryClient()
   const signOutInProgress = useRef(false)
 
   const handleSessionExpired = useCallback(() => {
@@ -121,15 +123,29 @@ export default function DashboardLayout({
     }
   }, [setUser, setProfile, setInitialized, handleSessionExpired])
 
-  // Re-validate auth when the user returns to the tab (e.g. after being away
-  // long enough for the session to expire). Throttled to at most once per 30s.
+  // Re-validate auth and refresh data when the user returns to the tab.
+  // Auth check is throttled to 30s; data invalidation triggers after 2min idle.
   useEffect(() => {
     let lastCheck = Date.now()
+    let lastActivity = Date.now()
+    const LONG_IDLE_MS = 2 * 60 * 1000
 
     function handleVisibilityChange() {
       if (document.visibilityState !== 'visible') return
-      if (Date.now() - lastCheck < 30_000) return
-      lastCheck = Date.now()
+
+      const now = Date.now()
+      const idleDuration = now - lastActivity
+      lastActivity = now
+
+      // After long idle, force-invalidate critical queries so data reloads
+      // immediately even if realtime reconnection is still in progress
+      if (idleDuration > LONG_IDLE_MS) {
+        queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      }
+
+      // Auth check throttled to 30s
+      if (now - lastCheck < 30_000) return
+      lastCheck = now
 
       supabase.auth.getUser().then(({ data: { user }, error }) => {
         if (error || !user) {
@@ -142,7 +158,7 @@ export default function DashboardLayout({
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [handleSessionExpired, setUser])
+  }, [handleSessionExpired, setUser, queryClient])
 
   return (
     <div className="flex h-screen overflow-hidden">
