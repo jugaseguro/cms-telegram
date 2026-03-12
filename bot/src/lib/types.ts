@@ -6,6 +6,13 @@ export interface BotConfig {
   is_active: boolean
   color: string
   welcome_message: string | null
+  // AI config
+  ai_enabled: boolean
+  ai_system_prompt: string | null
+  ai_model: string
+  ai_max_history: number
+  // Casino config
+  casino_operator: string | null
 }
 
 export interface Customer {
@@ -20,6 +27,11 @@ export interface Customer {
   last_activity: string | null
   bot_id: string
   created_at: string
+  // Casino session
+  casino_token: string | null
+  casino_user_id: string | null
+  casino_username: string | null
+  casino_profile: Record<string, unknown> | null
 }
 
 export interface Conversation {
@@ -30,6 +42,10 @@ export interface Conversation {
   last_message_at: string | null
   bot_id: string
   created_at: string
+  // Pending multi-step AI action (e.g. awaiting deposit receipt)
+  pending_action: Record<string, unknown> | null
+  // When true, AI is disabled for this conversation (agent took over manually)
+  ai_paused: boolean
 }
 
 export interface Message {
