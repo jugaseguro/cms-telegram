@@ -1,6 +1,7 @@
 export const CONVERSATION_STATUS_COLORS: Record<string, string> = {
   open: 'bg-status-success-bg text-status-success-text',
   pending: 'bg-status-warning-bg text-status-warning-text',
+  waiting_agent: 'bg-status-info-bg text-status-info-text',
   closed: 'bg-status-neutral-bg text-status-neutral-text',
 }
 

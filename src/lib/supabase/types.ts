@@ -128,7 +128,7 @@ export type Database = {
           id: string
           customer_id: string
           assigned_agent_id: string | null
-          status: 'open' | 'closed' | 'pending'
+          status: 'open' | 'closed' | 'pending' | 'waiting_agent'
           last_message_at: string | null
           waiting_since: string | null
           first_response_at: string | null

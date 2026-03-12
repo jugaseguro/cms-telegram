@@ -6,7 +6,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useChatStore } from '@/stores/chat-store'
-import { CircleDollarSign, User, Clock } from 'lucide-react'
+import { CircleDollarSign, User, Clock, Headset } from 'lucide-react'
 import { WaitingBadge } from './waiting-badge'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
@@ -24,8 +24,9 @@ export const ConversationItem = memo(function ConversationItem({
   const isUnread = useChatStore((s) => s.unreadConversationIds.has(conversation.id))
   const customer = conversation.customers
   const bot = conversation.bots
+  const isRequestingAgent = conversation.status === 'waiting_agent'
   const isPendingDeposit = conversation.status === 'pending'
-  const isWaitingAgent = !isPendingDeposit && !!conversation.waiting_since
+  const isWaitingAgent = !isPendingDeposit && !isRequestingAgent && !!conversation.waiting_since
   const name =
     [customer.first_name, customer.last_name].filter(Boolean).join(' ') ||
     customer.telegram_username ||
@@ -40,6 +41,8 @@ export const ConversationItem = memo(function ConversationItem({
         'group flex w-full gap-3 rounded-xl p-3 text-left transition-all duration-200 cursor-pointer',
         isActive
           ? 'bg-primary/10 shadow-sm shadow-primary/5 ring-1 ring-primary/15'
+          : isRequestingAgent
+          ? 'bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-300 dark:ring-blue-700/60 hover:bg-blue-100 dark:hover:bg-blue-900/40'
           : isPendingDeposit
           ? 'bg-red-100 dark:bg-red-950/60 ring-1 ring-red-300 dark:ring-red-800 animate-pulse hover:bg-red-200 dark:hover:bg-red-900/60'
           : isWaitingAgent
@@ -55,6 +58,7 @@ export const ConversationItem = memo(function ConversationItem({
           'h-11 w-11 transition-all duration-200',
           isUnread && 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background',
           isActive && 'ring-2 ring-primary/40 ring-offset-2 ring-offset-background',
+          isRequestingAgent && 'ring-2 ring-blue-400 ring-offset-2 ring-offset-background',
           isPendingDeposit && 'ring-2 ring-red-400 ring-offset-2 ring-offset-background',
           isWaitingAgent && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-background',
         )}>
@@ -62,6 +66,8 @@ export const ConversationItem = memo(function ConversationItem({
             'text-xs font-bold',
             isActive
               ? 'bg-primary/15 text-primary'
+              : isRequestingAgent
+              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
               : isPendingDeposit
               ? 'bg-red-200 text-red-700 dark:bg-red-900/50 dark:text-red-300'
               : isWaitingAgent
@@ -73,6 +79,11 @@ export const ConversationItem = memo(function ConversationItem({
             {initials}
           </AvatarFallback>
         </Avatar>
+        {isRequestingAgent && (
+          <span className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-background bg-blue-500 shadow-sm">
+            <Headset className="h-2.5 w-2.5 text-white" />
+          </span>
+        )}
         {isPendingDeposit && (
           <span className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-background bg-red-500 shadow-sm">
             <CircleDollarSign className="h-2.5 w-2.5 text-white" />
@@ -83,7 +94,7 @@ export const ConversationItem = memo(function ConversationItem({
             <Clock className="h-2.5 w-2.5 text-white" />
           </span>
         )}
-        {!isPendingDeposit && !isWaitingAgent && isUnread && !customer.has_paid && (
+        {!isRequestingAgent && !isPendingDeposit && !isWaitingAgent && isUnread && !customer.has_paid && (
           <span className="absolute -right-0.5 -top-0.5 h-3 w-3 rounded-full border-2 border-background bg-emerald-500" />
         )}
         {customer.has_paid && (
