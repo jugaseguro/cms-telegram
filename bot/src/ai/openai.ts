@@ -103,11 +103,11 @@ const TOOLS: ChatCompletionTool[] = [
     type: 'function',
     function: {
       name: 'request_register',
-      description: 'El cliente quiere crear una cuenta nueva en el casino. Solo pedí el usuario deseado. La contraseña se recopila de forma segura luego.',
+      description: 'El cliente quiere crear una cuenta nueva en el casino. Solo pedí el usuario deseado (mínimo 4 caracteres, sin espacios). La contraseña se recopila de forma segura luego.',
       parameters: {
         type: 'object',
         properties: {
-          username: { type: 'string', description: 'Usuario deseado para la cuenta' },
+          username: { type: 'string', description: 'Usuario deseado para la cuenta (mínimo 4 caracteres, sin espacios)' },
         },
         required: ['username'],
       },

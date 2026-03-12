@@ -131,6 +131,12 @@ export async function handleTextMessage(ctx: BotContext) {
     const pending = conversation.pending_action
     const operator = ctx.casinoOperator ?? 'DEFAULT'
 
+    // Validate password length before proceeding
+    if (text.length < 6) {
+      await sendBotReply(ctx, conversation.id, 'La contraseña debe tener al menos 6 caracteres. Intentá con otra.')
+      return
+    }
+
     await supabase
       .from('conversations')
       .update({ pending_action: null })
@@ -139,27 +145,21 @@ export async function handleTextMessage(ctx: BotContext) {
     try {
       const result = await registerCasino({
         username: pending.username as string,
+        email: pending.email as string,
         password: text,
-        telegramId: from.id,
-        telegramUsername: from.username,
         operator,
       })
 
-      if (!result) {
+      if (result.verificationEmailSent) {
+        await supabase
+          .from('customers')
+          .update({ casino_username: pending.username as string })
+          .eq('id', customer.id)
+
+        await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+      } else {
         await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Puede que el usuario o email ya estén en uso. ¿Querés intentar con otro usuario?')
-        return
       }
-
-      await supabase
-        .from('customers')
-        .update({
-          casino_token: encryptToken(result.jwt),
-          casino_username: pending.username as string,
-          casino_profile: result.profile as any,
-        })
-        .eq('id', customer.id)
-
-      await sendBotReply(ctx, conversation.id, `¡Bienvenido, ${pending.username}! 🎉 Tu cuenta fue creada y ya estás logueado. ¿En qué te puedo ayudar?`)
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
         await sendBotReply(ctx, conversation.id, 'Ese usuario ya existe. Probá con otro nombre de usuario o iniciá sesión si ya tenés cuenta.')
@@ -316,17 +316,26 @@ export async function handleTextMessage(ctx: BotContext) {
       // ---- request_register ----
       if (name === 'request_register') {
         const username = (args.username as string)?.trim()
+
         if (!username) {
           await sendBotReply(ctx, conversation.id, '¿Qué usuario querés usar para tu cuenta?')
           return
         }
+        if (username.length < 4 || username.includes(' ')) {
+          await sendBotReply(ctx, conversation.id, 'El usuario debe tener al menos 4 caracteres y no puede contener espacios. ¿Probás con otro?')
+          return
+        }
+
+        // Generate random email so the user doesn't have to provide one
+        const randomSuffix = randomUUID().replace(/-/g, '').slice(0, 8)
+        const email = `${username}.${randomSuffix}@user.bot`
 
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_password', username } })
+          .update({ pending_action: { type: 'awaiting_register_password', username, email } })
           .eq('id', conversation.id)
 
-        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta.`)
+        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (mínimo 6 caracteres).`)
         return
       }
 
@@ -402,7 +411,7 @@ export async function handleTextMessage(ctx: BotContext) {
           const success = await createWithdrawal(decryptToken(customer.casino_token), {
             amount: Number(args.amount),
             cbu: (args.cbu as string).trim(),
-            cuit: (args.cuit as string).trim(),
+            cuitl: (args.cuit as string).trim(),
             accountHolder: (args.account_holder as string).trim(),
           })
 
