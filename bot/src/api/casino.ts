@@ -67,16 +67,11 @@ export async function loginCasino(
 
 export interface RegisterParams {
   username: string
-  email: string
   password: string
   operator: string
 }
 
-export interface RegisterResult {
-  verificationEmailSent: boolean
-}
-
-export async function registerCasino(params: RegisterParams): Promise<RegisterResult> {
+export async function registerCasino(params: RegisterParams): Promise<boolean> {
   try {
     const response = await axios.post(
       REGISTER_URL,
@@ -84,23 +79,17 @@ export async function registerCasino(params: RegisterParams): Promise<RegisterRe
         operator: params.operator,
         user: {
           username: params.username,
-          email: params.email,
           password: params.password,
         },
       },
       { headers: HEADERS, timeout: TIMEOUT }
     )
 
-    const code = response.data?.code
-    if (code === 'users.register.verification_email_sent') {
-      return { verificationEmailSent: true }
-    }
-
-    return { verificationEmailSent: false }
+    return response.status >= 200 && response.status < 300
   } catch (err: any) {
     const code = err.response?.data?.code
     if (code === 'users.register.user_already_exists') throw new Error('casino_user_exists')
-    return { verificationEmailSent: false }
+    return false
   }
 }
 
