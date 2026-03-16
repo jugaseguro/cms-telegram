@@ -29,6 +29,7 @@ export default function DashboardLayout({
   const router = useRouter()
   const queryClient = useQueryClient()
   const signOutInProgress = useRef(false)
+  const isCheckingSession = useRef(false)
 
   const handleSessionExpired = useCallback(() => {
     if (signOutInProgress.current) return
@@ -110,10 +111,18 @@ export default function DashboardLayout({
 
     // Periodic session check: server-validated via getUser() which also
     // triggers an automatic token refresh if needed.
+    // Guarded by isCheckingSession to prevent concurrent getUser() calls
+    // from competing for the auth token Navigator Lock.
     const intervalId = setInterval(async () => {
-      const { data: { user: currentUser }, error } = await supabase.auth.getUser()
-      if (error || !currentUser) {
-        handleSessionExpired()
+      if (isCheckingSession.current) return
+      isCheckingSession.current = true
+      try {
+        const { data: { user: currentUser }, error } = await supabase.auth.getUser()
+        if (error || !currentUser) {
+          handleSessionExpired()
+        }
+      } finally {
+        isCheckingSession.current = false
       }
     }, SESSION_CHECK_INTERVAL)
 
@@ -143,9 +152,10 @@ export default function DashboardLayout({
         queryClient.invalidateQueries({ queryKey: ['conversations'] })
       }
 
-      // Auth check throttled to 30s
-      if (now - lastCheck < 30_000) return
+      // Auth check throttled to 60s and guarded against concurrent calls
+      if (now - lastCheck < 60_000 || isCheckingSession.current) return
       lastCheck = now
+      isCheckingSession.current = true
 
       supabase.auth.getUser().then(({ data: { user }, error }) => {
         if (error || !user) {
@@ -153,6 +163,8 @@ export default function DashboardLayout({
           return
         }
         setUser(user)
+      }).finally(() => {
+        isCheckingSession.current = false
       })
     }
 
