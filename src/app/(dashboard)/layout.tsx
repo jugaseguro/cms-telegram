@@ -128,11 +128,10 @@ export default function DashboardLayout({
       const idleDuration = now - lastActivity
       lastActivity = now
 
-      // After long idle, force-invalidate critical queries so data reloads
+      // After long idle, invalidate ALL active queries so data reloads
       // immediately even if realtime reconnection is still in progress
       if (idleDuration > LONG_IDLE_MS) {
-        queryClient.invalidateQueries({ queryKey: ['conversations'] })
-        queryClient.invalidateQueries({ queryKey: ['bots'] })
+        queryClient.invalidateQueries()
       }
     }
 
