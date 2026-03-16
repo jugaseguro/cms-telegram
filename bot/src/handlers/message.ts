@@ -446,20 +446,16 @@ export async function handleTextMessage(ctx: BotContext) {
 
       // ---- get_balance ----
       if (name === 'get_balance') {
-        if (!customer.casino_token) {
+        const session = (customer.casino_profile as any)?.session
+        if (!session) {
           await sendBotReply(ctx, conversation.id, 'Primero necesitás iniciar sesión. ¿Cuál es tu usuario del casino?')
           return
         }
-        try {
-          const balance = await getBalance(decryptToken(customer.casino_token), customer.casino_user_id ?? '')
-          if (balance === null) {
-            await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo en este momento. Intentá de nuevo más tarde.')
-          } else {
-            await sendBotReply(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS`)
-          }
-        } catch (err) {
-          if (err instanceof CasinoAuthError) await handleExpiredToken(ctx, customer.id, conversation.id)
-          else throw err
+        const balance = await getBalance(session)
+        if (balance === null) {
+          await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo. Tu sesión puede haber expirado. Intentá iniciar sesión de nuevo.')
+        } else {
+          await sendBotReply(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS`)
         }
         return
       }
