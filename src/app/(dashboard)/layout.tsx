@@ -17,9 +17,6 @@ const supabase = createClient()
 
 const PROFILE_SELECT = 'id, email, full_name, role, avatar_url, created_at'
 
-/** How often to check if the session is still valid (5 minutes) */
-const SESSION_CHECK_INTERVAL = 5 * 60 * 1000
-
 export default function DashboardLayout({
   children,
 }: {
@@ -29,7 +26,6 @@ export default function DashboardLayout({
   const router = useRouter()
   const queryClient = useQueryClient()
   const signOutInProgress = useRef(false)
-  const isCheckingSession = useRef(false)
 
   const handleSessionExpired = useCallback(() => {
     if (signOutInProgress.current) return
@@ -73,6 +69,10 @@ export default function DashboardLayout({
     }
     loadUser()
 
+    // Supabase's autoRefreshToken handles token refresh internally
+    // (including its own visibilitychange listener). We only listen
+    // to onAuthStateChange to keep our auth store in sync — no manual
+    // getUser() calls needed, which avoids Navigator Lock contention.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         // Initial auth is handled by loadUser() with server-validated getUser().
@@ -109,33 +109,15 @@ export default function DashboardLayout({
       }
     )
 
-    // Periodic session check: server-validated via getUser() which also
-    // triggers an automatic token refresh if needed.
-    // Guarded by isCheckingSession to prevent concurrent getUser() calls
-    // from competing for the auth token Navigator Lock.
-    const intervalId = setInterval(async () => {
-      if (isCheckingSession.current) return
-      isCheckingSession.current = true
-      try {
-        const { data: { user: currentUser }, error } = await supabase.auth.getUser()
-        if (error || !currentUser) {
-          handleSessionExpired()
-        }
-      } finally {
-        isCheckingSession.current = false
-      }
-    }, SESSION_CHECK_INTERVAL)
-
     return () => {
       subscription.unsubscribe()
-      clearInterval(intervalId)
     }
   }, [setUser, setProfile, setInitialized, handleSessionExpired])
 
-  // Re-validate auth and refresh data when the user returns to the tab.
-  // Auth check is throttled to 30s; data invalidation triggers after 2min idle.
+  // Refresh data when the user returns to the tab after long idle.
+  // Auth is NOT checked here — Supabase's autoRefreshToken handles that
+  // internally. We only invalidate queries so stale data reloads.
   useEffect(() => {
-    let lastCheck = Date.now()
     let lastActivity = Date.now()
     const LONG_IDLE_MS = 2 * 60 * 1000
 
@@ -150,27 +132,13 @@ export default function DashboardLayout({
       // immediately even if realtime reconnection is still in progress
       if (idleDuration > LONG_IDLE_MS) {
         queryClient.invalidateQueries({ queryKey: ['conversations'] })
+        queryClient.invalidateQueries({ queryKey: ['bots'] })
       }
-
-      // Auth check throttled to 60s and guarded against concurrent calls
-      if (now - lastCheck < 60_000 || isCheckingSession.current) return
-      lastCheck = now
-      isCheckingSession.current = true
-
-      supabase.auth.getUser().then(({ data: { user }, error }) => {
-        if (error || !user) {
-          handleSessionExpired()
-          return
-        }
-        setUser(user)
-      }).finally(() => {
-        isCheckingSession.current = false
-      })
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [handleSessionExpired, setUser, queryClient])
+  }, [queryClient])
 
   return (
     <div className="flex h-screen overflow-hidden">
