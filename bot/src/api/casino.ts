@@ -87,8 +87,15 @@ export async function registerCasino(params: RegisterParams): Promise<boolean> {
 
     return response.status >= 200 && response.status < 300
   } catch (err: any) {
-    const code = err.response?.data?.code
-    if (code === 'users.register.user_already_exists') throw new Error('casino_user_exists')
+    const data = err.response?.data
+    const msg = data?.message
+    if (
+      data?.code === 'users.register.user_already_exists' ||
+      msg?.code === -7 ||
+      msg?.description === 'Duplicated alias'
+    ) {
+      throw new Error('casino_user_exists')
+    }
     return false
   }
 }
