@@ -364,7 +364,18 @@ export async function handleTextMessage(ctx: BotContext) {
       await ctx.replyWithChatAction('typing')
 
       const history = await buildHistory(conversation.id, ctx.aiMaxHistory)
-      const systemPrompt = ctx.aiSystemPrompt ?? 'Eres un asistente virtual amigable. Responde en el mismo idioma que el usuario.'
+      const basePrompt = ctx.aiSystemPrompt ?? 'Eres un asistente virtual amigable. Responde en el mismo idioma que el usuario.'
+
+      // Re-fetch customer to get latest casino state (may have changed during this conversation)
+      const freshCustomer = await findOrCreateCustomer(from, ctx.botId)
+      const isLoggedIn = !!(freshCustomer?.casino_token)
+      const casinoUser = freshCustomer?.casino_username
+
+      const sessionContext = isLoggedIn
+        ? `\n\n[ESTADO DE SESIÓN]: El usuario "${casinoUser}" YA tiene sesión iniciada. NO le pidas que inicie sesión. Usá directamente las funciones get_balance, create_deposit, create_withdrawal, get_transactions según lo que pida.`
+        : `\n\n[ESTADO DE SESIÓN]: El usuario NO tiene sesión iniciada. Si quiere hacer operaciones (saldo, depósito, retiro, movimientos), primero necesita iniciar sesión o crear una cuenta.`
+
+      const systemPrompt = basePrompt + sessionContext
 
       const result = await callAI({
         systemPrompt,
