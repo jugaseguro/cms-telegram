@@ -33,14 +33,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 30_000,
             refetchOnWindowFocus: true,
-            retry: (failureCount, error) => {
-              const msg = (error as { message?: string })?.message ?? ''
-              // More retries with backoff for lock contention errors
-              if (msg.includes('AbortError') || msg.includes('Lock broken')) {
-                return failureCount < 4
-              }
-              return failureCount < 2
-            },
+            retry: 2,
             retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
           },
         },
