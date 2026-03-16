@@ -132,8 +132,8 @@ export async function handleTextMessage(ctx: BotContext) {
     const operator = ctx.casinoOperator ?? 'DEFAULT'
 
     // Validate password length before proceeding
-    if (text.length < 6) {
-      await sendBotReply(ctx, conversation.id, 'La contraseña debe tener al menos 6 caracteres. Intentá con otra.')
+    if (text.length < 8 || text.length > 30) {
+      await sendBotReply(ctx, conversation.id, 'La contraseña debe tener entre 8 y 30 caracteres. Intentá con otra.')
       return
     }
 
@@ -162,6 +162,8 @@ export async function handleTextMessage(ctx: BotContext) {
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
         await sendBotReply(ctx, conversation.id, 'Ese usuario ya existe. Probá con otro nombre de usuario o iniciá sesión si ya tenés cuenta.')
+      } else if (err.message === 'casino_password_invalid') {
+        await sendBotReply(ctx, conversation.id, 'La contraseña debe tener entre 8 y 30 caracteres. Intentá con otra.')
       } else {
         await sendBotReply(ctx, conversation.id, 'Hubo un error al crear la cuenta. Intentá de nuevo en un momento.')
       }
@@ -330,7 +332,7 @@ export async function handleTextMessage(ctx: BotContext) {
           .update({ pending_action: { type: 'awaiting_register_password', username } })
           .eq('id', conversation.id)
 
-        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (mínimo 6 caracteres).`)
+        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (entre 8 y 30 caracteres).`)
         return
       }
 

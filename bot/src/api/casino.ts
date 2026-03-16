@@ -96,6 +96,9 @@ export async function registerCasino(params: RegisterParams): Promise<boolean> {
     ) {
       throw new Error('casino_user_exists')
     }
+    if (data?.code === 'users.register.must_be_min_least_characters') {
+      throw new Error('casino_password_invalid')
+    }
     return false
   }
 }
