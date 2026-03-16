@@ -108,7 +108,7 @@ export async function getBalance(session: string): Promise<number | null> {
   try {
     const response = await axios.post(
       BALANCE_URL,
-      `company=PCSC&session=${session}`,
+      `company=PCSC&session=${encodeURIComponent(session)}`,
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: TIMEOUT }
     )
     if (response.data?.result !== 'OK') return null

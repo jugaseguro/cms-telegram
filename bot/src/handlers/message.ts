@@ -103,12 +103,13 @@ export async function handleTextMessage(ctx: BotContext) {
         return
       }
 
+      const profileWithEncSession = { ...loginResult.profile, session: encryptToken(loginResult.session) }
       await supabase
         .from('customers')
         .update({
           casino_token: encryptToken(loginResult.jwt),
           casino_username: casinoUsername,
-          casino_profile: loginResult.profile as any,
+          casino_profile: profileWithEncSession as any,
         })
         .eq('id', customer.id)
 
@@ -135,13 +136,14 @@ export async function handleTextMessage(ctx: BotContext) {
       return
     }
 
-    // Show confirmation before registering
+    // Show confirmation before registering — password stored encrypted, never shown in chat
     await supabase
       .from('conversations')
-      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: text } })
+      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: encryptToken(text) } })
       .eq('id', conversation.id)
 
-    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${pending.username}\n🔑 Contraseña: ${text}\n\n¿Está todo bien? (sí/no)`)
+    const masked = text[0] + '*'.repeat(text.length - 2) + text[text.length - 1]
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${pending.username}\n🔑 Contraseña: ${masked}\n\n¿Está todo bien? (sí/no)`)
     return
   }
 
@@ -172,6 +174,8 @@ export async function handleTextMessage(ctx: BotContext) {
 
     const operator = ctx.casinoOperator ?? 'DEFAULT'
 
+    const plainPassword = decryptToken(pending.password as string)
+
     await supabase
       .from('conversations')
       .update({ pending_action: null })
@@ -180,7 +184,7 @@ export async function handleTextMessage(ctx: BotContext) {
     try {
       const success = await registerCasino({
         username: pending.username as string,
-        password: pending.password as string,
+        password: plainPassword,
         operator,
       })
 
@@ -188,19 +192,21 @@ export async function handleTextMessage(ctx: BotContext) {
         // Auto-login after successful registration
         const loginResult = await loginCasino(
           pending.username as string,
-          pending.password as string,
+          plainPassword,
           from.id,
           from.username,
           operator,
         )
 
         if (loginResult) {
+          // Encrypt session before storing in profile
+          const profileWithEncSession = { ...loginResult.profile, session: encryptToken(loginResult.session) }
           await supabase
             .from('customers')
             .update({
               casino_username: pending.username as string,
               casino_token: encryptToken(loginResult.jwt),
-              casino_profile: loginResult.profile as any,
+              casino_profile: profileWithEncSession as any,
             })
             .eq('id', customer.id)
 
@@ -225,10 +231,10 @@ export async function handleTextMessage(ctx: BotContext) {
       }
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
-        // Keep password, ask for new username only
+        // Keep encrypted password, ask for new username only
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_new_username', password: pending.password } })
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword) } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, 'Ese usuario ya está en uso. Elegí otro nombre de usuario (tu contraseña se mantiene).')
@@ -258,13 +264,15 @@ export async function handleTextMessage(ctx: BotContext) {
       return
     }
 
-    // Show confirmation with new username + saved password
+    // Show confirmation with new username + saved password (already encrypted)
     await supabase
       .from('conversations')
       .update({ pending_action: { type: 'awaiting_register_confirm', username, password: pending.password } })
       .eq('id', conversation.id)
 
-    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${username}\n🔑 Contraseña: ${pending.password}\n\n¿Está todo bien? (sí/no)`)
+    const plainPw = decryptToken(pending.password as string)
+    const masked = plainPw[0] + '*'.repeat(plainPw.length - 2) + plainPw[plainPw.length - 1]
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${username}\n🔑 Contraseña: ${masked}\n\n¿Está todo bien? (sí/no)`)
     return
   }
 
@@ -446,12 +454,12 @@ export async function handleTextMessage(ctx: BotContext) {
 
       // ---- get_balance ----
       if (name === 'get_balance') {
-        const session = (customer.casino_profile as any)?.session
-        if (!session) {
+        const encSession = (customer.casino_profile as any)?.session
+        if (!encSession) {
           await sendBotReply(ctx, conversation.id, 'Primero necesitás iniciar sesión. ¿Cuál es tu usuario del casino?')
           return
         }
-        const balance = await getBalance(session)
+        const balance = await getBalance(decryptToken(encSession))
         if (balance === null) {
           await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo. Tu sesión puede haber expirado. Intentá iniciar sesión de nuevo.')
         } else {
