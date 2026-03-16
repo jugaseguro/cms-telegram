@@ -129,13 +129,48 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_password') {
     const pending = conversation.pending_action
-    const operator = ctx.casinoOperator ?? 'DEFAULT'
 
-    // Validate password length before proceeding
     if (text.length < 8 || text.length > 30) {
       await sendBotReply(ctx, conversation.id, 'La contraseña debe tener entre 8 y 30 caracteres. Intentá con otra.')
       return
     }
+
+    // Show confirmation before registering
+    await supabase
+      .from('conversations')
+      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: text } })
+      .eq('id', conversation.id)
+
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${pending.username}\n🔑 Contraseña: ${text}\n\n¿Está todo bien? (sí/no)`)
+    return
+  }
+
+  // -------------------------------------------------------
+  // REGISTER: Confirmation step
+  // -------------------------------------------------------
+  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_confirm') {
+    const pending = conversation.pending_action
+    const lower = text.toLowerCase().trim()
+
+    const YES = /^(s[ií]|si|sí|dale|ok|okey|bueno|claro|obvio|sip|sep|afirmativo|ya|confirmo|confirmar)/
+    const NO = /^(no|nah|nel|cancel|mejor\s*no|nop|paso|na|cambiar)/
+
+    if (NO.test(lower)) {
+      await supabase
+        .from('conversations')
+        .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+        .eq('id', conversation.id)
+
+      await sendBotReply(ctx, conversation.id, 'OK, elegí otra contraseña (entre 8 y 30 caracteres).')
+      return
+    }
+
+    if (!YES.test(lower)) {
+      await sendBotReply(ctx, conversation.id, 'Respondé "sí" para confirmar o "no" para cambiar la contraseña.')
+      return
+    }
+
+    const operator = ctx.casinoOperator ?? 'DEFAULT'
 
     await supabase
       .from('conversations')
@@ -145,7 +180,7 @@ export async function handleTextMessage(ctx: BotContext) {
     try {
       const success = await registerCasino({
         username: pending.username as string,
-        password: text,
+        password: pending.password as string,
         operator,
       })
 
@@ -157,17 +192,50 @@ export async function handleTextMessage(ctx: BotContext) {
 
         await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
       } else {
-        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Puede que el usuario ya esté en uso. ¿Querés intentar con otro?')
+        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.')
       }
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
-        await sendBotReply(ctx, conversation.id, 'Ese usuario ya existe. Probá con otro nombre de usuario o iniciá sesión si ya tenés cuenta.')
+        // Keep password, ask for new username only
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: pending.password } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'Ese usuario ya está en uso. Elegí otro nombre de usuario (tu contraseña se mantiene).')
       } else if (err.message === 'casino_password_invalid') {
-        await sendBotReply(ctx, conversation.id, 'La contraseña debe tener entre 8 y 30 caracteres. Intentá con otra.')
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'La contraseña no es válida. Debe tener entre 8 y 30 caracteres. Intentá con otra.')
       } else {
         await sendBotReply(ctx, conversation.id, 'Hubo un error al crear la cuenta. Intentá de nuevo en un momento.')
       }
     }
+    return
+  }
+
+  // -------------------------------------------------------
+  // REGISTER: New username after duplicate (password preserved)
+  // -------------------------------------------------------
+  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_new_username') {
+    const pending = conversation.pending_action
+    const username = text.trim()
+
+    if (!username || username.length < 4 || username.includes(' ')) {
+      await sendBotReply(ctx, conversation.id, 'El usuario debe tener al menos 4 caracteres y no puede contener espacios. Probá con otro.')
+      return
+    }
+
+    // Show confirmation with new username + saved password
+    await supabase
+      .from('conversations')
+      .update({ pending_action: { type: 'awaiting_register_confirm', username, password: pending.password } })
+      .eq('id', conversation.id)
+
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${username}\n🔑 Contraseña: ${pending.password}\n\n¿Está todo bien? (sí/no)`)
     return
   }
 
