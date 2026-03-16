@@ -143,14 +143,13 @@ export async function handleTextMessage(ctx: BotContext) {
       .eq('id', conversation.id)
 
     try {
-      const result = await registerCasino({
+      const success = await registerCasino({
         username: pending.username as string,
-        email: pending.email as string,
         password: text,
         operator,
       })
 
-      if (result.verificationEmailSent) {
+      if (success) {
         await supabase
           .from('customers')
           .update({ casino_username: pending.username as string })
@@ -158,7 +157,7 @@ export async function handleTextMessage(ctx: BotContext) {
 
         await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
       } else {
-        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Puede que el usuario o email ya estén en uso. ¿Querés intentar con otro usuario?')
+        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Puede que el usuario ya esté en uso. ¿Querés intentar con otro?')
       }
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
@@ -326,13 +325,9 @@ export async function handleTextMessage(ctx: BotContext) {
           return
         }
 
-        // Generate random email so the user doesn't have to provide one
-        const randomSuffix = randomUUID().replace(/-/g, '').slice(0, 8)
-        const email = `${username}.${randomSuffix}@user.bot`
-
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_password', username, email } })
+          .update({ pending_action: { type: 'awaiting_register_password', username } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (mínimo 6 caracteres).`)

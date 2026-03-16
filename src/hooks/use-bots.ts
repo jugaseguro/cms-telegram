@@ -22,6 +22,10 @@ export function useBots() {
         .order('created_at')
 
       if (error) {
+        // Re-throw lock contention errors so TanStack Query retries with backoff
+        if (error.message?.includes('AbortError') || error.message?.includes('Lock broken')) {
+          throw error
+        }
         console.warn('[use-bots] Error fetching bots:', error.message)
         return [] as BotPublic[]
       }

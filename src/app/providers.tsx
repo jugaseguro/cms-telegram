@@ -6,13 +6,15 @@ import { useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { createClient } from '@/lib/supabase/client'
 
+let lastAuthRetry = 0
+const AUTH_RETRY_THROTTLE = 10_000
+
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
     () =>
       new QueryClient({
         queryCache: new QueryCache({
           onError: (error) => {
-            // Detect Supabase auth/RLS errors and attempt automatic token refresh
             const msg = (error as { message?: string })?.message ?? ''
             const code = (error as { code?: string })?.code ?? ''
             if (
@@ -22,7 +24,12 @@ export function Providers({ children }: { children: React.ReactNode }) {
               code === '401' ||
               code === '403'
             ) {
-              createClient().auth.getUser()
+              // Throttle auth refresh to avoid lock contention when multiple queries fail at once
+              const now = Date.now()
+              if (now - lastAuthRetry > AUTH_RETRY_THROTTLE) {
+                lastAuthRetry = now
+                createClient().auth.getUser()
+              }
             }
           },
         }),
@@ -30,7 +37,15 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 30_000,
             refetchOnWindowFocus: true,
-            retry: 2,
+            retry: (failureCount, error) => {
+              const msg = (error as { message?: string })?.message ?? ''
+              // More retries with backoff for lock contention errors
+              if (msg.includes('AbortError') || msg.includes('Lock broken')) {
+                return failureCount < 4
+              }
+              return failureCount < 2
+            },
+            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
           },
         },
       })
