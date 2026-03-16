@@ -103,12 +103,13 @@ export async function handleTextMessage(ctx: BotContext) {
         return
       }
 
+      const profileWithEncSession = { ...loginResult.profile, session: encryptToken(loginResult.session) }
       await supabase
         .from('customers')
         .update({
           casino_token: encryptToken(loginResult.jwt),
           casino_username: casinoUsername,
-          casino_profile: loginResult.profile as any,
+          casino_profile: profileWithEncSession as any,
         })
         .eq('id', customer.id)
 
@@ -129,13 +130,51 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_password') {
     const pending = conversation.pending_action
-    const operator = ctx.casinoOperator ?? 'DEFAULT'
 
-    // Validate password length before proceeding
-    if (text.length < 6) {
-      await sendBotReply(ctx, conversation.id, 'La contraseña debe tener al menos 6 caracteres. Intentá con otra.')
+    if (text.length < 8 || text.length > 30) {
+      await sendBotReply(ctx, conversation.id, 'La contraseña debe tener entre 8 y 30 caracteres. Intentá con otra.')
       return
     }
+
+    // Show confirmation before registering — password stored encrypted, never shown in chat
+    await supabase
+      .from('conversations')
+      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: encryptToken(text) } })
+      .eq('id', conversation.id)
+
+    const masked = text[0] + '*'.repeat(text.length - 2) + text[text.length - 1]
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${pending.username}\n🔑 Contraseña: ${masked}\n\n¿Está todo bien? (sí/no)`)
+    return
+  }
+
+  // -------------------------------------------------------
+  // REGISTER: Confirmation step
+  // -------------------------------------------------------
+  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_confirm') {
+    const pending = conversation.pending_action
+    const lower = text.toLowerCase().trim()
+
+    const YES = /^(s[ií]|si|sí|dale|ok|okey|bueno|claro|obvio|sip|sep|afirmativo|ya|confirmo|confirmar)/
+    const NO = /^(no|nah|nel|cancel|mejor\s*no|nop|paso|na|cambiar)/
+
+    if (NO.test(lower)) {
+      await supabase
+        .from('conversations')
+        .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+        .eq('id', conversation.id)
+
+      await sendBotReply(ctx, conversation.id, 'OK, elegí otra contraseña (entre 8 y 30 caracteres).')
+      return
+    }
+
+    if (!YES.test(lower)) {
+      await sendBotReply(ctx, conversation.id, 'Respondé "sí" para confirmar o "no" para cambiar la contraseña.')
+      return
+    }
+
+    const operator = ctx.casinoOperator ?? 'DEFAULT'
+
+    const plainPassword = decryptToken(pending.password as string)
 
     await supabase
       .from('conversations')
@@ -145,27 +184,95 @@ export async function handleTextMessage(ctx: BotContext) {
     try {
       const success = await registerCasino({
         username: pending.username as string,
-        password: text,
+        password: plainPassword,
         operator,
       })
 
       if (success) {
-        await supabase
-          .from('customers')
-          .update({ casino_username: pending.username as string })
-          .eq('id', customer.id)
+        // Auto-login after successful registration
+        const loginResult = await loginCasino(
+          pending.username as string,
+          plainPassword,
+          from.id,
+          from.username,
+          operator,
+        )
 
-        await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+        if (loginResult) {
+          // Encrypt session before storing in profile
+          const profileWithEncSession = { ...loginResult.profile, session: encryptToken(loginResult.session) }
+          await supabase
+            .from('customers')
+            .update({
+              casino_username: pending.username as string,
+              casino_token: encryptToken(loginResult.jwt),
+              casino_profile: profileWithEncSession as any,
+            })
+            .eq('id', customer.id)
+
+          await sendBotReply(ctx, conversation.id,
+            `¡Cuenta creada e iniciaste sesión, ${pending.username}! 🎉\n\n` +
+            `¿Qué querés hacer?\n` +
+            `💰 Ver mi saldo\n` +
+            `📥 Depositar\n` +
+            `📤 Retirar\n` +
+            `📋 Ver mis movimientos\n` +
+            `👤 Hablar con un agente`)
+        } else {
+          await supabase
+            .from('customers')
+            .update({ casino_username: pending.username as string })
+            .eq('id', customer.id)
+
+          await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+        }
       } else {
-        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Puede que el usuario ya esté en uso. ¿Querés intentar con otro?')
+        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.')
       }
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
-        await sendBotReply(ctx, conversation.id, 'Ese usuario ya existe. Probá con otro nombre de usuario o iniciá sesión si ya tenés cuenta.')
+        // Keep encrypted password, ask for new username only
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword) } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'Ese usuario ya está en uso. Elegí otro nombre de usuario (tu contraseña se mantiene).')
+      } else if (err.message === 'casino_password_invalid') {
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'La contraseña no es válida. Debe tener entre 8 y 30 caracteres. Intentá con otra.')
       } else {
         await sendBotReply(ctx, conversation.id, 'Hubo un error al crear la cuenta. Intentá de nuevo en un momento.')
       }
     }
+    return
+  }
+
+  // -------------------------------------------------------
+  // REGISTER: New username after duplicate (password preserved)
+  // -------------------------------------------------------
+  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_new_username') {
+    const pending = conversation.pending_action
+    const username = text.trim()
+
+    if (!username || username.length < 4 || username.includes(' ')) {
+      await sendBotReply(ctx, conversation.id, 'El usuario debe tener al menos 4 caracteres y no puede contener espacios. Probá con otro.')
+      return
+    }
+
+    // Show confirmation with new username + saved password (already encrypted)
+    await supabase
+      .from('conversations')
+      .update({ pending_action: { type: 'awaiting_register_confirm', username, password: pending.password } })
+      .eq('id', conversation.id)
+
+    const plainPw = decryptToken(pending.password as string)
+    const masked = plainPw[0] + '*'.repeat(plainPw.length - 2) + plainPw[plainPw.length - 1]
+    await sendBotReply(ctx, conversation.id, `Confirmá tus datos:\n\n👤 Usuario: ${username}\n🔑 Contraseña: ${masked}\n\n¿Está todo bien? (sí/no)`)
     return
   }
 
@@ -265,7 +372,18 @@ export async function handleTextMessage(ctx: BotContext) {
       await ctx.replyWithChatAction('typing')
 
       const history = await buildHistory(conversation.id, ctx.aiMaxHistory)
-      const systemPrompt = ctx.aiSystemPrompt ?? 'Eres un asistente virtual amigable. Responde en el mismo idioma que el usuario.'
+      const basePrompt = ctx.aiSystemPrompt ?? 'Eres un asistente virtual amigable. Responde en el mismo idioma que el usuario.'
+
+      // Re-fetch customer to get latest casino state (may have changed during this conversation)
+      const freshCustomer = await findOrCreateCustomer(from, ctx.botId)
+      const isLoggedIn = !!(freshCustomer?.casino_token)
+      const casinoUser = freshCustomer?.casino_username
+
+      const sessionContext = isLoggedIn
+        ? `\n\n[ESTADO DE SESIÓN]: El usuario "${casinoUser}" YA tiene sesión iniciada. NO le pidas que inicie sesión. Usá directamente las funciones get_balance, create_deposit, create_withdrawal, get_transactions según lo que pida.`
+        : `\n\n[ESTADO DE SESIÓN]: El usuario NO tiene sesión iniciada. Si quiere hacer operaciones (saldo, depósito, retiro, movimientos), primero necesita iniciar sesión o crear una cuenta.`
+
+      const systemPrompt = basePrompt + sessionContext
 
       const result = await callAI({
         systemPrompt,
@@ -330,26 +448,22 @@ export async function handleTextMessage(ctx: BotContext) {
           .update({ pending_action: { type: 'awaiting_register_password', username } })
           .eq('id', conversation.id)
 
-        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (mínimo 6 caracteres).`)
+        await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (entre 8 y 30 caracteres).`)
         return
       }
 
       // ---- get_balance ----
       if (name === 'get_balance') {
-        if (!customer.casino_token) {
+        const encSession = (customer.casino_profile as any)?.session
+        if (!encSession) {
           await sendBotReply(ctx, conversation.id, 'Primero necesitás iniciar sesión. ¿Cuál es tu usuario del casino?')
           return
         }
-        try {
-          const balance = await getBalance(decryptToken(customer.casino_token), customer.casino_user_id ?? '')
-          if (balance === null) {
-            await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo en este momento. Intentá de nuevo más tarde.')
-          } else {
-            await sendBotReply(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS`)
-          }
-        } catch (err) {
-          if (err instanceof CasinoAuthError) await handleExpiredToken(ctx, customer.id, conversation.id)
-          else throw err
+        const balance = await getBalance(decryptToken(encSession))
+        if (balance === null) {
+          await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo. Tu sesión puede haber expirado. Intentá iniciar sesión de nuevo.')
+        } else {
+          await sendBotReply(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS`)
         }
         return
       }

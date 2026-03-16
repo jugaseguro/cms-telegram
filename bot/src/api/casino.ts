@@ -27,6 +27,7 @@ export interface CasinoProfile {
 
 export interface LoginResult {
   jwt: string
+  session: string
   profile: CasinoProfile
 }
 
@@ -58,7 +59,7 @@ export async function loginCasino(
       return null
     }
 
-    return { jwt: data.token, profile: data.profile }
+    return { jwt: data.token, session: data.profile?.session ?? '', profile: data.profile }
   } catch (err: any) {
     if (err.response?.status === 401) throw new CasinoAuthError()
     return null
@@ -87,25 +88,34 @@ export async function registerCasino(params: RegisterParams): Promise<boolean> {
 
     return response.status >= 200 && response.status < 300
   } catch (err: any) {
-    const code = err.response?.data?.code
-    if (code === 'users.register.user_already_exists') throw new Error('casino_user_exists')
+    const data = err.response?.data
+    const msg = data?.message
+    if (
+      data?.code === 'users.register.user_already_exists' ||
+      msg?.code === -7 ||
+      msg?.description === 'Duplicated alias'
+    ) {
+      throw new Error('casino_user_exists')
+    }
+    if (data?.code === 'users.register.must_be_min_least_characters') {
+      throw new Error('casino_password_invalid')
+    }
     return false
   }
 }
 
-export async function getBalance(
-  jwt: string,
-  userId: string
-): Promise<number | null> {
+export async function getBalance(session: string): Promise<number | null> {
   try {
-    const response = await axios.get(BALANCE_URL, {
-      headers: { Authorization: `Bearer ${jwt}` },
-      params: { userId },
-      timeout: TIMEOUT,
-    })
-    return response.data?.balance ?? response.data?.data?.balance ?? null
-  } catch (err: any) {
-    if (err.response?.status === 401) throw new CasinoAuthError()
+    const response = await axios.post(
+      BALANCE_URL,
+      `company=PCSC&session=${encodeURIComponent(session)}`,
+      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, timeout: TIMEOUT }
+    )
+    if (response.data?.result !== 'OK') return null
+    const accounts = response.data?.accounts as any[] | undefined
+    const cash = accounts?.find((a: any) => a.account === 'CASH')
+    return cash?.amount ?? null
+  } catch {
     return null
   }
 }
