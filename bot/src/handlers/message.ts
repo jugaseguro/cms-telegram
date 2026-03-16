@@ -185,12 +185,41 @@ export async function handleTextMessage(ctx: BotContext) {
       })
 
       if (success) {
-        await supabase
-          .from('customers')
-          .update({ casino_username: pending.username as string })
-          .eq('id', customer.id)
+        // Auto-login after successful registration
+        const loginResult = await loginCasino(
+          pending.username as string,
+          pending.password as string,
+          from.id,
+          from.username,
+          operator,
+        )
 
-        await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+        if (loginResult) {
+          await supabase
+            .from('customers')
+            .update({
+              casino_username: pending.username as string,
+              casino_token: encryptToken(loginResult.jwt),
+              casino_profile: loginResult.profile as any,
+            })
+            .eq('id', customer.id)
+
+          await sendBotReply(ctx, conversation.id,
+            `¡Cuenta creada e iniciaste sesión, ${pending.username}! 🎉\n\n` +
+            `¿Qué querés hacer?\n` +
+            `💰 Ver mi saldo\n` +
+            `📥 Depositar\n` +
+            `📤 Retirar\n` +
+            `📋 Ver mis movimientos\n` +
+            `👤 Hablar con un agente`)
+        } else {
+          await supabase
+            .from('customers')
+            .update({ casino_username: pending.username as string })
+            .eq('id', customer.id)
+
+          await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+        }
       } else {
         await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.')
       }
