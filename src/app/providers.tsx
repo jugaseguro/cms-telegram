@@ -4,10 +4,6 @@ import { QueryClient, QueryClientProvider, QueryCache } from '@tanstack/react-qu
 import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
-import { createClient } from '@/lib/supabase/client'
-
-let lastAuthRetry = 0
-const AUTH_RETRY_THROTTLE = 10_000
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -15,20 +11,20 @@ export function Providers({ children }: { children: React.ReactNode }) {
       new QueryClient({
         queryCache: new QueryCache({
           onError: (error) => {
-            const msg = (error as { message?: string })?.message ?? ''
-            const code = (error as { code?: string })?.code ?? ''
-            if (
-              msg.includes('JWT') ||
-              msg.includes('token') ||
-              code === 'PGRST301' ||
-              code === '401' ||
-              code === '403'
-            ) {
-              // Throttle auth refresh to avoid lock contention when multiple queries fail at once
-              const now = Date.now()
-              if (now - lastAuthRetry > AUTH_RETRY_THROTTLE) {
-                lastAuthRetry = now
-                createClient().auth.getUser()
+            // Auth token refresh is handled automatically by Supabase's
+            // autoRefreshToken mechanism. No manual getUser() call needed
+            // here — it was causing Navigator Lock contention.
+            if (process.env.NODE_ENV === 'development') {
+              const msg = (error as { message?: string })?.message ?? ''
+              const code = (error as { code?: string })?.code ?? ''
+              if (
+                msg.includes('JWT') ||
+                msg.includes('token') ||
+                code === 'PGRST301' ||
+                code === '401' ||
+                code === '403'
+              ) {
+                console.warn('[QueryCache] Auth-related query error:', msg || code)
               }
             }
           },
