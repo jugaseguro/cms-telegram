@@ -18,6 +18,7 @@ import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { AutoResponseDialog } from './auto-response-dialog'
 import { useAuthStore } from '@/stores/auth-store'
+import { QueryError } from '@/components/ui/query-error'
 import type { AutoResponse } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -28,7 +29,7 @@ export function AutoResponsesContent() {
   const queryClient = useQueryClient()
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const { data: responses, isLoading } = useQuery({
+  const { data: responses, isLoading, isError, refetch } = useQuery({
     queryKey: ['auto-responses'],
     enabled: isInitialized,
     queryFn: async () => {
@@ -102,7 +103,14 @@ export function AutoResponsesContent() {
                 </TableCell>
               </TableRow>
             )}
-            {responses?.length === 0 && !isLoading && (
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <QueryError onRetry={refetch} />
+                </TableCell>
+              </TableRow>
+            )}
+            {responses?.length === 0 && !isLoading && !isError && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No hay respuestas automáticas configuradas

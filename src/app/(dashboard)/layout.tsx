@@ -115,29 +115,39 @@ export default function DashboardLayout({
   }, [setUser, setProfile, setInitialized, handleSessionExpired])
 
   // Refresh data when the user returns to the tab after long idle.
-  // Auth is NOT checked here — Supabase's autoRefreshToken handles that
-  // internally. We only invalidate queries so stale data reloads.
+  // We first refresh the auth token (getUser triggers a server-side
+  // token validation), then invalidate queries so they refetch with
+  // a valid JWT. Without this, queries refetch with an expired token
+  // and silently fail.
   useEffect(() => {
     let lastActivity = Date.now()
     const LONG_IDLE_MS = 2 * 60 * 1000
 
-    function handleVisibilityChange() {
+    async function handleVisibilityChange() {
       if (document.visibilityState !== 'visible') return
 
       const now = Date.now()
       const idleDuration = now - lastActivity
       lastActivity = now
 
-      // After long idle, invalidate ALL active queries so data reloads
-      // immediately even if realtime reconnection is still in progress
       if (idleDuration > LONG_IDLE_MS) {
+        try {
+          const { data: { user }, error } = await supabase.auth.getUser()
+          if (error || !user) {
+            handleSessionExpired()
+            return
+          }
+        } catch {
+          handleSessionExpired()
+          return
+        }
         queryClient.invalidateQueries()
       }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [queryClient])
+  }, [queryClient, handleSessionExpired])
 
   return (
     <div className="flex h-screen overflow-hidden">

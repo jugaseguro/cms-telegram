@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
+import { QueryError } from '@/components/ui/query-error'
 import {
   Table,
   TableBody,
@@ -49,7 +50,7 @@ export function TransactionTable() {
 
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const { data: transactions, isLoading } = useQuery({
+  const { data: transactions, isLoading, isError, refetch } = useQuery({
     queryKey: ['transactions', statusFilter],
     enabled: isInitialized,
     queryFn: async () => {
@@ -109,6 +110,10 @@ export function TransactionTable() {
         <TableSkeleton columns={8} rows={6} />
       </div>
     )
+  }
+
+  if (isError) {
+    return <QueryError onRetry={refetch} />
   }
 
   return (

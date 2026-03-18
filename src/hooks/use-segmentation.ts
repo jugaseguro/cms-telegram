@@ -1,12 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { SegmentationRule, SegmentationRuleWithLabel, SegmentationLog, SegmentationCondition } from '@/lib/supabase/types'
 
 const supabase = createClient()
 
 export function useSegmentationRules() {
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   return useQuery({
     queryKey: ['segmentation-rules'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('segmentation_rules')
@@ -19,8 +23,11 @@ export function useSegmentationRules() {
 }
 
 export function useSegmentationLogs() {
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   return useQuery({
     queryKey: ['segmentation-logs'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('segmentation_logs')

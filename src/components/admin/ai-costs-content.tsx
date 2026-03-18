@@ -14,6 +14,7 @@ import { Sparkles, DollarSign, Zap, TrendingUp } from 'lucide-react'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useAiCosts, useAiCostsSummary } from '@/hooks/use-ai-costs'
+import { QueryError } from '@/components/ui/query-error'
 
 function formatCost(usd: number): string {
   if (usd < 0.001) return `$${(usd * 100).toFixed(4)}¢`
@@ -26,7 +27,7 @@ function formatTokens(n: number): string {
 }
 
 export function AiCostsContent() {
-  const { data: logs, isLoading } = useAiCosts()
+  const { data: logs, isLoading, isError, refetch } = useAiCosts()
   const { data: summary } = useAiCostsSummary()
 
   return (
@@ -119,7 +120,14 @@ export function AiCostsContent() {
                 </TableCell>
               </TableRow>
             )}
-            {!isLoading && (!logs || logs.length === 0) && (
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={7}>
+                  <QueryError onRetry={refetch} />
+                </TableCell>
+              </TableRow>
+            )}
+            {!isLoading && !isError && (!logs || logs.length === 0) && (
               <TableRow>
                 <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
                   No hay registros de uso de IA todavía.

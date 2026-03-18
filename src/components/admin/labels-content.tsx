@@ -21,10 +21,11 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Plus, Pencil, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
+import { QueryError } from '@/components/ui/query-error'
 import type { Label as LabelType } from '@/lib/supabase/types'
 
 export function LabelsContent() {
-  const { data: labels, isLoading } = useLabels()
+  const { data: labels, isLoading, isError, refetch } = useLabels()
   const createLabel = useCreateLabel()
   const updateLabel = useUpdateLabel()
   const deleteLabel = useDeleteLabel()
@@ -100,6 +101,13 @@ export function LabelsContent() {
               <TableRow>
                 <TableCell colSpan={3} className="text-center">
                   Cargando...
+                </TableCell>
+              </TableRow>
+            )}
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={3}>
+                  <QueryError onRetry={refetch} />
                 </TableCell>
               </TableRow>
             )}

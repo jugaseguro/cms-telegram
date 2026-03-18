@@ -17,6 +17,7 @@ import { AgentFormDialog } from '@/components/admin/agent-form-dialog'
 import { format } from 'date-fns'
 import { Plus, Pencil } from 'lucide-react'
 import { useAuthStore } from '@/stores/auth-store'
+import { QueryError } from '@/components/ui/query-error'
 import type { Profile } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -26,7 +27,7 @@ export function AgentsContent() {
   const [editAgent, setEditAgent] = useState<Profile | null>(null)
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const { data: agents, isLoading } = useQuery({
+  const { data: agents, isLoading, isError, refetch } = useQuery({
     queryKey: ['agents'],
     enabled: isInitialized,
     queryFn: async () => {
@@ -70,6 +71,13 @@ export function AgentsContent() {
               <TableRow>
                 <TableCell colSpan={5} className="text-center">
                   Cargando...
+                </TableCell>
+              </TableRow>
+            )}
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <QueryError onRetry={refetch} />
                 </TableCell>
               </TableRow>
             )}

@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { QueryError } from '@/components/ui/query-error'
 import {
   Table,
   TableBody,
@@ -62,7 +63,7 @@ export function RecontactContent() {
     target_label_id: '' as string,
   })
 
-  const { data: rules, isLoading } = useQuery({
+  const { data: rules, isLoading, isError, refetch } = useQuery({
     queryKey: ['recontact-rules'],
     enabled: isInitialized,
     queryFn: async () => {
@@ -207,7 +208,14 @@ export function RecontactContent() {
                 </TableCell>
               </TableRow>
             )}
-            {rules?.length === 0 && !isLoading && (
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={5}>
+                  <QueryError onRetry={refetch} />
+                </TableCell>
+              </TableRow>
+            )}
+            {rules?.length === 0 && !isLoading && !isError && (
               <TableRow>
                 <TableCell colSpan={5} className="text-center text-muted-foreground">
                   No hay reglas de recontacto configuradas

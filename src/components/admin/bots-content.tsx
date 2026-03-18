@@ -18,6 +18,7 @@ import { format } from 'date-fns'
 import { Plus, Pencil, Power, PowerOff, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { useAuthStore } from '@/stores/auth-store'
+import { QueryError } from '@/components/ui/query-error'
 import type { BotPublic } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -28,7 +29,7 @@ export function BotsContent() {
   const queryClient = useQueryClient()
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const { data: bots, isLoading } = useQuery({
+  const { data: bots, isLoading, isError, refetch } = useQuery({
     queryKey: ['admin-bots'],
     enabled: isInitialized,
     queryFn: async () => {
@@ -111,6 +112,13 @@ export function BotsContent() {
               <TableRow>
                 <TableCell colSpan={6} className="text-center">
                   Cargando...
+                </TableCell>
+              </TableRow>
+            )}
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <QueryError onRetry={refetch} />
                 </TableCell>
               </TableRow>
             )}
