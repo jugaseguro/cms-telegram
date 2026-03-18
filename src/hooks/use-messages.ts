@@ -54,10 +54,12 @@ export function useMessages(conversationId: string | null) {
   return {
     data: query.data?.messages ?? [],
     isLoading: query.isLoading,
+    isError: query.isError,
     isFetching: query.isFetching,
     hasNextPage: query.hasNextPage,
     isFetchingNextPage: query.isFetchingNextPage,
     fetchNextPage: query.fetchNextPage,
+    refetch: query.refetch,
   }
 }
 

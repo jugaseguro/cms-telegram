@@ -104,7 +104,7 @@ export function useRealtimeConversations(enabled = true) {
   useEffect(() => {
     if (!enabled) return
 
-    function handleVisibilityChange() {
+    async function handleVisibilityChange() {
       if (document.visibilityState !== 'visible') return
 
       const now = Date.now()
@@ -117,6 +117,9 @@ export function useRealtimeConversations(enabled = true) {
       const state = channel.state
       if (state !== 'joined') {
         lastReconnectAttempt.current = now
+        // Refresh auth token before reconnecting so the new subscription
+        // uses a valid JWT
+        try { await supabase.auth.getUser() } catch { /* proceed anyway */ }
         channel.unsubscribe().then(() => {
           channel.subscribe()
         })
@@ -201,9 +204,10 @@ export function useRealtimeConversations(enabled = true) {
           // Safety: if stuck in reconnecting for too long, force a full
           // channel teardown and resubscribe to recover from dead connections.
           clearTimeout(stuckTimer.current)
-          stuckTimer.current = setTimeout(() => {
+          stuckTimer.current = setTimeout(async () => {
             const ch = channelRef.current
             if (ch && ch.state !== 'joined') {
+              try { await supabase.auth.getUser() } catch { /* proceed anyway */ }
               ch.unsubscribe().then(() => {
                 ch.subscribe()
               })

@@ -19,6 +19,7 @@ import { format, formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { Search, Eye, UsersRound } from 'lucide-react'
 import { TableSkeleton } from '@/components/ui/page-skeleton'
+import { QueryError } from '@/components/ui/query-error'
 import { CUSTOMER_STATUS_COLORS } from '@/lib/constants'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Customer, Transaction } from '@/lib/supabase/types'
@@ -55,7 +56,7 @@ export function CustomerTable() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
-  const { data: customers, isLoading } = useQuery({
+  const { data: customers, isLoading, isError, refetch } = useQuery({
     queryKey: ['customers'],
     enabled: isInitialized,
     queryFn: async () => {
@@ -111,6 +112,10 @@ export function CustomerTable() {
         <TableSkeleton columns={10} rows={6} />
       </div>
     )
+  }
+
+  if (isError) {
+    return <QueryError onRetry={refetch} />
   }
 
   return (

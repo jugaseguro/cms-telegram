@@ -8,6 +8,7 @@ import { ConversationItem } from './conversation-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
 import { Search, MessageSquareOff } from 'lucide-react'
+import { QueryError } from '@/components/ui/query-error'
 
 export function ConversationList() {
   const {
@@ -18,7 +19,7 @@ export function ConversationList() {
   } = useChatStore()
 
   const queryClient = useQueryClient()
-  const { data: conversations, isLoading } = useConversations()
+  const { data: conversations, isLoading, isError, refetch } = useConversations()
   const handleSearchChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value),
     [setSearchQuery]
@@ -61,7 +62,10 @@ export function ConversationList() {
               ))}
             </div>
           )}
-          {filtered?.length === 0 && !isLoading && (
+          {isError && (
+            <QueryError onRetry={refetch} />
+          )}
+          {filtered?.length === 0 && !isLoading && !isError && (
             <div className="flex flex-col items-center gap-3 p-8 text-muted-foreground">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60">
                 <MessageSquareOff className="h-6 w-6" />

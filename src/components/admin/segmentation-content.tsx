@@ -10,6 +10,7 @@ import {
   useToggleSegmentationRule,
 } from '@/hooks/use-segmentation'
 import { useLabels } from '@/hooks/use-labels'
+import { QueryError } from '@/components/ui/query-error'
 import {
   Table,
   TableBody,
@@ -155,7 +156,7 @@ const emptyForm: FormState = {
 // ── Main component ─────────────────────────────────────────
 
 export function SegmentationContent() {
-  const { data: rules, isLoading } = useSegmentationRules()
+  const { data: rules, isLoading, isError, refetch } = useSegmentationRules()
   const { data: logs } = useSegmentationLogs()
   const { data: labels } = useLabels()
   const createMutation = useCreateSegmentationRule()
@@ -282,7 +283,14 @@ export function SegmentationContent() {
                 </TableCell>
               </TableRow>
             )}
-            {rules?.length === 0 && !isLoading && (
+            {isError && (
+              <TableRow>
+                <TableCell colSpan={6}>
+                  <QueryError onRetry={refetch} />
+                </TableCell>
+              </TableRow>
+            )}
+            {rules?.length === 0 && !isLoading && !isError && (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8">
                   <p className="text-muted-foreground">No hay reglas configuradas</p>

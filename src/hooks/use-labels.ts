@@ -1,12 +1,16 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { useAuthStore } from '@/stores/auth-store'
 import type { Label } from '@/lib/supabase/types'
 
 const supabase = createClient()
 
 export function useLabels() {
+  const isInitialized = useAuthStore((s) => s.isInitialized)
+
   return useQuery({
     queryKey: ['labels'],
+    enabled: isInitialized,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('labels')
