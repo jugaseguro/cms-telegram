@@ -9,6 +9,7 @@ const BALANCE_URL = process.env.BALANCE_URL!
 const DEPOSIT_URL = process.env.PAYMENT_DEPOSIT_URL!
 const WITHDRAW_URL = process.env.PAYMENT_WITHDRAW_URL!
 const PAYMENTS_URL = process.env.PAYMENTS_URL!
+const PROVIDERS_URL = process.env.PROVIDERS_URL!
 
 // Thrown when the casino API returns 401 (JWT expired or invalid)
 export class CasinoAuthError extends Error {
@@ -124,26 +125,38 @@ export interface DepositParams {
   amount: number
   firstName: string
   lastName: string
-  taxId: string
-  email: string
   paymentId: string
-  proofBase64: string // data:image/jpeg;base64,...
+}
+
+export async function getProviderId(jwt: string): Promise<string | null> {
+  try {
+    const res = await axios.get(PROVIDERS_URL, {
+      headers: { Authorization: `Bearer ${jwt}` },
+      timeout: TIMEOUT,
+    })
+    const providers = res.data?.providers || []
+    for (const provider of providers) {
+      if (provider.p) return provider.p
+    }
+    return null
+  } catch (err: any) {
+    if (err.response?.status === 401) throw new CasinoAuthError()
+    return null
+  }
 }
 
 export async function createDeposit(
   jwt: string,
   params: DepositParams
-): Promise<{ paymentId: string } | null> {
+): Promise<{ url: string } | null> {
   try {
     const payload = {
-      currency: 'ARS',
-      name: `${params.firstName} ${params.lastName}`,
-      taxId: params.taxId,
-      email: params.email,
       amount: params.amount,
-      reference: '0000',
       paymentId: params.paymentId,
-      proofDocument: params.proofBase64,
+      currency: 'ARS',
+      channel: 'BT',
+      name: params.firstName,
+      surname: params.lastName,
     }
 
     const res = await axios.post(DEPOSIT_URL, payload, {
@@ -151,10 +164,8 @@ export async function createDeposit(
       timeout: 20000,
     })
 
-    if (res.data?.error === false) {
-      return { paymentId: params.paymentId }
-    }
-
+    const url = res.data?.url
+    if (url) return { url }
     return null
   } catch (err: any) {
     if (err.response?.status === 401) throw new CasinoAuthError()

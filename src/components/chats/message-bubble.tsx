@@ -11,6 +11,49 @@ import { Textarea } from '@/components/ui/textarea'
 import { toast } from 'sonner'
 import NextImage from 'next/image'
 
+// Parse HTML <a> tags and plain URLs into clickable links
+function MessageContent({ content }: { content: string }) {
+  // Split on HTML <a> tags, keeping the tags as separate parts
+  const parts = content.split(/(<a\s+href="[^"]*">[^<]*<\/a>)/gi)
+
+  return (
+    <>
+      {parts.map((part, i) => {
+        // Check if this part is an HTML <a> tag
+        const anchorMatch = part.match(/^<a\s+href="([^"]*)">(.*?)<\/a>$/i)
+        if (anchorMatch) {
+          return (
+            <a key={i} href={anchorMatch[1]} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-700 break-all">
+              {anchorMatch[2]}
+            </a>
+          )
+        }
+        // For plain text parts, also linkify bare URLs
+        return <LinkifyText key={i} text={part} />
+      })}
+    </>
+  )
+}
+
+function LinkifyText({ text }: { text: string }) {
+  const urlRegex = /(https?:\/\/[^\s]+)/g
+  const parts = text.split(urlRegex)
+
+  return (
+    <>
+      {parts.map((part, i) =>
+        urlRegex.test(part) ? (
+          <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="text-blue-500 underline hover:text-blue-700 break-all">
+            {part}
+          </a>
+        ) : (
+          <span key={i}>{part}</span>
+        )
+      )}
+    </>
+  )
+}
+
 interface MessageBubbleProps {
   message: Message
 }
@@ -232,7 +275,9 @@ export const MessageBubble = memo(function MessageBubble({ message }: MessageBub
             </div>
           </div>
         ) : message.content ? (
-          <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+          <p className="whitespace-pre-wrap text-sm">
+            <MessageContent content={message.content} />
+          </p>
         ) : null}
 
         <p
