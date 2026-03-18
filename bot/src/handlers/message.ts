@@ -3,9 +3,23 @@ import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 import type { AutoResponse } from '../lib/types'
 import { buildHistory, callAI, checkRateLimit } from '../ai/openai'
-import { loginCasino, registerCasino, getBalance, createDeposit, createWithdrawal, getTransactions, CasinoAuthError } from '../api/casino'
+import { loginCasino, registerCasino, getBalance, createDeposit, getProviderId, createWithdrawal, getTransactions, CasinoAuthError } from '../api/casino'
 import { encryptToken, decryptToken } from '../lib/crypto'
-import { randomUUID } from 'crypto'
+
+// -------------------------------------------------------
+// Shared patterns for confirmation responses & cancel
+// -------------------------------------------------------
+
+const YES_PATTERN = /^(s[ií]+|si+|dale(\s*dale)?|ok+|okey|okay|bueno|claro|obvio|sip+|sep|afirmativo|ya|confirmo|confirmar|listo|perfecto|va+|vamos|seguro|por\s*supuesto|genial|de\s*una|eso|exacto|sale|bien|correcto|por\s*fa|porfa|porfavor|quiero|agente|humano)/i
+const NO_PATTERN = /^(no+|nah+|nel|cancel[ao]?r?|mejor\s*no|nop[e]?|paso|na+h?|cambiar|dejá|deja|nope|no\s*quiero|negativo|salir|anular|segu[ií]|continua|continú?a)/i
+const CANCEL_PATTERN = /^(cancel[ao]?r?|salir|volver|atrás|atras|menu|menú|inicio|parar|no\s*quiero|dejá|deja)/i
+
+const PENDING_ACTION_TTL_MS = 10 * 60 * 1000 // 10 minutes
+
+function isPendingActionStale(pendingAction: Record<string, unknown> | null): boolean {
+  if (!pendingAction?.created_at) return false
+  return Date.now() - (pendingAction.created_at as number) > PENDING_ACTION_TTL_MS
+}
 
 // -------------------------------------------------------
 // Prompt injection filter — blocks before calling OpenAI
@@ -41,10 +55,6 @@ function validateDepositArgs(args: Record<string, unknown>): string | null {
     return 'El nombre debe tener al menos 2 caracteres.'
   if (typeof args.last_name !== 'string' || args.last_name.trim().length < 2)
     return 'El apellido debe tener al menos 2 caracteres.'
-  if (typeof args.tax_id !== 'string' || !/^\d{8,11}$/.test(args.tax_id.trim()))
-    return 'El DNI/CUIL/CUIT debe tener entre 8 y 11 dígitos numéricos.'
-  if (typeof args.email !== 'string' || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(args.email))
-    return 'El email no parece válido. ¿Podés revisarlo?'
   return null
 }
 
@@ -52,10 +62,19 @@ function validateWithdrawArgs(args: Record<string, unknown>): string | null {
   const amount = Number(args.amount)
   if (isNaN(amount) || amount < 100 || amount > 500000)
     return 'El monto debe estar entre $100 y $500.000 ARS.'
-  if (typeof args.cbu !== 'string' || !/^\d{22}$/.test(args.cbu.trim()))
+
+  // Normalize CBU: strip spaces, dashes, dots
+  const cbuRaw = typeof args.cbu === 'string' ? args.cbu.replace(/[\s\-\.]/g, '') : ''
+  if (!/^\d{22}$/.test(cbuRaw))
     return 'El CBU debe tener exactamente 22 dígitos.'
-  if (typeof args.cuit !== 'string' || args.cuit.trim().length < 7)
-    return 'El DNI/CUIL/CUIT debe tener al menos 7 caracteres.'
+  args.cbu = cbuRaw
+
+  // Normalize CUIT: strip dashes and spaces
+  const cuitRaw = typeof args.cuit === 'string' ? args.cuit.replace(/[\-\s]/g, '') : ''
+  if (!/^\d{7,11}$/.test(cuitRaw))
+    return 'El DNI/CUIL/CUIT debe tener entre 7 y 11 dígitos.'
+  args.cuit = cuitRaw
+
   if (typeof args.account_holder !== 'string' || args.account_holder.trim().length < 4)
     return 'El nombre del titular debe tener al menos 4 caracteres.'
   return null
@@ -82,6 +101,39 @@ export async function handleTextMessage(ctx: BotContext) {
   if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
 
   // -------------------------------------------------------
+  // TTL: Clear stale pending_action (>10 min)
+  // -------------------------------------------------------
+  if (conversation.pending_action && isPendingActionStale(conversation.pending_action)) {
+    await supabase
+      .from('conversations')
+      .update({ pending_action: null })
+      .eq('id', conversation.id)
+    conversation.pending_action = null
+  }
+
+  // -------------------------------------------------------
+  // CANCEL: Universal cancel detection for any pending_action
+  // -------------------------------------------------------
+  if (conversation.pending_action && CANCEL_PATTERN.test(text.trim().toLowerCase())) {
+    await supabase
+      .from('conversations')
+      .update({ pending_action: null })
+      .eq('id', conversation.id)
+
+    await insertMessageSafe({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      sender_id: String(from.id),
+      content: text,
+      message_type: 'text',
+      telegram_message_id: ctx.message?.message_id || null,
+    })
+
+    await sendBotReply(ctx, conversation.id, 'Operación cancelada. ¿En qué te puedo ayudar?')
+    return
+  }
+
+  // -------------------------------------------------------
   // SECURITY: Intercept password BEFORE saving to DB or OpenAI
   // -------------------------------------------------------
   if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_password') {
@@ -99,7 +151,7 @@ export async function handleTextMessage(ctx: BotContext) {
       const loginResult = await loginCasino(casinoUsername, text, from.id, from.username, operator)
 
       if (!loginResult) {
-        await sendBotReply(ctx, conversation.id, 'Usuario o contraseña incorrectos. ¿Querés intentar de nuevo? Enviame tu usuario.')
+        await sendBotReply(ctx, conversation.id, 'Usuario o contraseña incorrectos. Podés intentar de nuevo enviándome tu usuario, o escribí "registrarme" si necesitás crear una cuenta.')
         return
       }
 
@@ -139,7 +191,7 @@ export async function handleTextMessage(ctx: BotContext) {
     // Show confirmation before registering — password stored encrypted, never shown in chat
     await supabase
       .from('conversations')
-      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: encryptToken(text) } })
+      .update({ pending_action: { type: 'awaiting_register_confirm', username: pending.username, password: encryptToken(text), created_at: Date.now() } })
       .eq('id', conversation.id)
 
     const masked = text[0] + '*'.repeat(text.length - 2) + text[text.length - 1]
@@ -154,20 +206,17 @@ export async function handleTextMessage(ctx: BotContext) {
     const pending = conversation.pending_action
     const lower = text.toLowerCase().trim()
 
-    const YES = /^(s[ií]|si|sí|dale|ok|okey|bueno|claro|obvio|sip|sep|afirmativo|ya|confirmo|confirmar)/
-    const NO = /^(no|nah|nel|cancel|mejor\s*no|nop|paso|na|cambiar)/
-
-    if (NO.test(lower)) {
+    if (NO_PATTERN.test(lower)) {
       await supabase
         .from('conversations')
-        .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+        .update({ pending_action: { type: 'awaiting_register_password', username: pending.username, created_at: Date.now() } })
         .eq('id', conversation.id)
 
       await sendBotReply(ctx, conversation.id, 'OK, elegí otra contraseña (entre 8 y 30 caracteres).')
       return
     }
 
-    if (!YES.test(lower)) {
+    if (!YES_PATTERN.test(lower)) {
       await sendBotReply(ctx, conversation.id, 'Respondé "sí" para confirmar o "no" para cambiar la contraseña.')
       return
     }
@@ -224,7 +273,7 @@ export async function handleTextMessage(ctx: BotContext) {
             .update({ casino_username: pending.username as string })
             .eq('id', customer.id)
 
-          await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nYa podés iniciar sesión con tu usuario y contraseña.`)
+          await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nNo pude iniciar sesión automáticamente, pero podés hacerlo escribiendo "iniciar sesión" con tu usuario y contraseña.`)
         }
       } else {
         await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.')
@@ -234,14 +283,14 @@ export async function handleTextMessage(ctx: BotContext) {
         // Keep encrypted password, ask for new username only
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword) } })
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword), created_at: Date.now() } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, 'Ese usuario ya está en uso. Elegí otro nombre de usuario (tu contraseña se mantiene).')
       } else if (err.message === 'casino_password_invalid') {
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_password', username: pending.username } })
+          .update({ pending_action: { type: 'awaiting_register_password', username: pending.username, created_at: Date.now() } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, 'La contraseña no es válida. Debe tener entre 8 y 30 caracteres. Intentá con otra.')
@@ -267,7 +316,7 @@ export async function handleTextMessage(ctx: BotContext) {
     // Show confirmation with new username + saved password (already encrypted)
     await supabase
       .from('conversations')
-      .update({ pending_action: { type: 'awaiting_register_confirm', username, password: pending.password } })
+      .update({ pending_action: { type: 'awaiting_register_confirm', username, password: pending.password, created_at: Date.now() } })
       .eq('id', conversation.id)
 
     const plainPw = decryptToken(pending.password as string)
@@ -282,10 +331,7 @@ export async function handleTextMessage(ctx: BotContext) {
   if (conversation.pending_action?.type === 'awaiting_agent_confirmation') {
     const lower = text.toLowerCase().trim()
 
-    const YES_PATTERNS = /^(s[ií]|si|sí|dale|ok|okey|bueno|por\s*favor|quiero|agente|humano|seguro|claro|obvio|ya|sip|sep|afirmativo|porfa|porfavor|por\s*fa)/
-    const NO_PATTERNS = /^(no|nah|nel|segu[ií]|continua|continú?a|cancel|mejor\s*no|dejá|deja|nop|paso|na)/
-
-    if (YES_PATTERNS.test(lower)) {
+    if (YES_PATTERN.test(lower)) {
       await supabase
         .from('conversations')
         .update({ status: 'waiting_agent', ai_paused: true, pending_action: null })
@@ -304,7 +350,7 @@ export async function handleTextMessage(ctx: BotContext) {
       return
     }
 
-    if (NO_PATTERNS.test(lower)) {
+    if (NO_PATTERN.test(lower)) {
       await supabase
         .from('conversations')
         .update({ pending_action: null })
@@ -379,11 +425,29 @@ export async function handleTextMessage(ctx: BotContext) {
       const isLoggedIn = !!(freshCustomer?.casino_token)
       const casinoUser = freshCustomer?.casino_username
 
+      // Pre-AI: detect deposit intent to bypass AI entirely (AI sometimes ignores request_deposit)
+      const DEPOSIT_INTENT = /^(quiero cargar|cargar saldo|cargar plata|cargar dinero|depositar|meter plata|hacer dep[oó]sito|quiero depositar|cargar|deposito|depósito)/i
+      if (isLoggedIn && DEPOSIT_INTENT.test(text.trim())) {
+        const casinoUserName = freshCustomer?.casino_username ?? 'tu cuenta'
+        const msg = `Vas a cargar saldo a la cuenta "${casinoUserName}".\n\nPasame los datos del titular que va a hacer la transferencia: nombre, apellido y monto.\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\nJuan Perez 5000`
+        await sendBotReply(ctx, conversation.id, msg)
+        return
+      }
+
+      // Pre-AI: detect withdrawal intent to bypass AI entirely
+      const WITHDRAW_INTENT = /^(quiero retirar|retirar saldo|retirar plata|retirar dinero|sacar plata|retiro|hacer retiro)/i
+      if (isLoggedIn && WITHDRAW_INTENT.test(text.trim())) {
+        await sendBotReply(ctx, conversation.id, 'Para procesar tu retiro necesito los siguientes datos:\n\n• Monto a retirar\n• CBU (22 dígitos)\n• DNI/CUIT/CUIL\n• Nombre completo del titular\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\n5000 0110599340055000123456 20123456789 Juan Perez')
+        return
+      }
+
       const sessionContext = isLoggedIn
-        ? `\n\n[ESTADO DE SESIÓN]: El usuario "${casinoUser}" YA tiene sesión iniciada. NO le pidas que inicie sesión. Usá directamente las funciones get_balance, create_deposit, create_withdrawal, get_transactions según lo que pida.`
+        ? `\n\n[ESTADO DE SESIÓN]: El usuario "${casinoUser}" YA tiene sesión iniciada. NO le pidas que inicie sesión. Usá directamente las funciones get_balance, request_deposit, create_deposit, create_withdrawal, get_transactions según lo que pida.\n\n[REGLA DEPÓSITO CRÍTICA]: Cuando el usuario quiera depositar/cargar saldo/cargar dinero/cargar plata/meter plata, llamá request_deposit INMEDIATAMENTE. NUNCA generes texto sobre depósitos. NUNCA le preguntes el monto, nombre o apellido vos. El sistema le envía las instrucciones automáticamente. Cuando el usuario te pase nombre, apellido y monto todo junto, llamá create_deposit. NO pidas DNI/CUIT/CUIL, ya no se necesita.\n\n[REGLA IMPORTANTE]: NUNCA respondas con texto cuando el usuario pide depositar o cargar. SIEMPRE usá la función request_deposit.`
         : `\n\n[ESTADO DE SESIÓN]: El usuario NO tiene sesión iniciada. Si quiere hacer operaciones (saldo, depósito, retiro, movimientos), primero necesita iniciar sesión o crear una cuenta.`
 
-      const systemPrompt = basePrompt + sessionContext
+      const casinoLink = `\n\n[LINK DEL CASINO]: Si el usuario pregunta por el link, la página o el sitio del casino, respondé con: https://www.1xclub.bet/`
+
+      const systemPrompt = basePrompt + sessionContext + casinoLink
 
       const result = await callAI({
         systemPrompt,
@@ -406,6 +470,13 @@ export async function handleTextMessage(ctx: BotContext) {
       })
 
       if (result.type === 'text') {
+        // If AI generated deposit-related text instead of calling request_deposit, intercept it
+        if (isLoggedIn && /(?:pasame|decime|necesito|enviame|mandame|proporcion|indic).*(nombre|apellido|monto|datos|titular|cantidad|depositar|cargar)|(?:orden|solicitud).*dep[oó]sito|cu[aá]nto quer[eé]s (cargar|depositar)|monto.*(?:cargar|depositar|dep[oó]sito)|DNI.*CUIT.*CUIL|datos del titular|(?:dep[oó]sito|cargar\s*saldo).*(?:monto|cuánto|cu[aá]nto)/i.test(result.content)) {
+          const casinoUserName = freshCustomer?.casino_username ?? 'tu cuenta'
+          const fixedMsg = `Vas a cargar saldo a la cuenta "${casinoUserName}".\n\nPasame los datos del titular que va a hacer la transferencia: nombre, apellido y monto.\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\nJuan Perez 5000`
+          await sendBotReply(ctx, conversation.id, fixedMsg)
+          return
+        }
         await sendBotReply(ctx, conversation.id, result.content)
         return
       }
@@ -423,7 +494,7 @@ export async function handleTextMessage(ctx: BotContext) {
 
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_password', casino_username: username } })
+          .update({ pending_action: { type: 'awaiting_password', casino_username: username, created_at: Date.now() } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, `Perfecto. Ahora enviame tu contraseña para ${username}.`)
@@ -445,7 +516,7 @@ export async function handleTextMessage(ctx: BotContext) {
 
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_register_password', username } })
+          .update({ pending_action: { type: 'awaiting_register_password', username, created_at: Date.now() } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, `Perfecto, casi listo! Ahora elegí una contraseña para tu cuenta (entre 8 y 30 caracteres).`)
@@ -461,10 +532,22 @@ export async function handleTextMessage(ctx: BotContext) {
         }
         const balance = await getBalance(decryptToken(encSession))
         if (balance === null) {
-          await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo. Tu sesión puede haber expirado. Intentá iniciar sesión de nuevo.')
+          await sendBotReply(ctx, conversation.id, 'No pude obtener tu saldo. Tu sesión puede haber expirado. Escribí "iniciar sesión" para volver a ingresar.')
         } else {
           await sendBotReply(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS`)
         }
+        return
+      }
+
+      // ---- request_deposit (fixed message, no AI text) ----
+      if (name === 'request_deposit') {
+        if (!customer.casino_token) {
+          await sendBotReply(ctx, conversation.id, 'Primero necesitás iniciar sesión. ¿Cuál es tu usuario del casino?')
+          return
+        }
+        const casinoUser = customer.casino_username ?? 'tu cuenta'
+        const msg = `Vas a cargar saldo a la cuenta "${casinoUser}".\n\nPasame los datos del titular que va a hacer la transferencia: nombre, apellido y monto.\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\nJuan Perez 5000`
+        await sendBotReply(ctx, conversation.id, msg)
         return
       }
 
@@ -481,25 +564,41 @@ export async function handleTextMessage(ctx: BotContext) {
           return
         }
 
-        const pendingAction = {
-          type: 'awaiting_deposit_receipt',
-          amount: Number(args.amount),
-          first_name: (args.first_name as string).trim(),
-          last_name: (args.last_name as string).trim(),
-          tax_id: (args.tax_id as string).trim(),
-          email: (args.email as string).trim(),
-          payment_id: randomUUID().replace(/-/g, '').slice(0, 24),
+        try {
+          const jwt = decryptToken(customer.casino_token)
+          const monto = Number(args.amount).toLocaleString('es-AR')
+          const casinoUsername = customer.casino_username ?? ''
+          const userLabel = casinoUsername ? ` para la cuenta ${casinoUsername}` : ''
+
+          await sendBotReply(ctx, conversation.id, `Procesando depósito por $${monto} ARS${userLabel}...`)
+
+          const providerId = await getProviderId(jwt)
+          if (!providerId) {
+            await sendBotReply(ctx, conversation.id, 'No se pudo obtener el proveedor de pago. Esto puede ser un problema temporal. Intentá de nuevo en unos minutos o escribí "agente" para que te ayude un operador.')
+            return
+          }
+
+          const result = await createDeposit(jwt, {
+            amount: Number(args.amount),
+            firstName: (args.first_name as string).trim(),
+            lastName: (args.last_name as string).trim(),
+            paymentId: providerId,
+          })
+
+          if (result?.url) {
+            const msg = `¡Listo! Para completar el pago tocá el siguiente link:\n\n<a href="${result.url}">💳 Completar pago de $${monto} ARS${userLabel}</a>\n\nUna vez que completes el pago, el saldo se va a acreditar automáticamente en tu cuenta.\n\n⏳ La acreditación puede demorar unos minutos. Si tenés algún inconveniente, escribí "agente" para comunicarte con un operador.\n\n🎰 <a href="https://www.1xclub.bet/">Ir al casino</a>`
+            await sendBotReply(ctx, conversation.id, msg, { parse_mode: 'HTML' })
+          } else {
+            await sendBotReply(ctx, conversation.id, 'Hubo un problema al generar el enlace de pago. Intentá de nuevo o contactá a un agente.')
+          }
+        } catch (err) {
+          if (err instanceof CasinoAuthError) {
+            await handleExpiredToken(ctx, customer.id, conversation.id)
+          } else {
+            console.error('[create_deposit] Error:', err)
+            await sendBotReply(ctx, conversation.id, 'Hubo un error procesando el depósito. Intentá de nuevo más tarde.')
+          }
         }
-
-        await supabase
-          .from('conversations')
-          .update({ pending_action: pendingAction })
-          .eq('id', conversation.id)
-
-        const monto = Number(args.amount).toLocaleString('es-AR')
-        const firstName = (args.first_name as string).trim()
-        const msg = `¡Perfecto, ${firstName}! Ya generé la orden de depósito por $${monto} ARS a tu nombre 😊\n\nAhora solo necesito que me mandes el comprobante de la transferencia y lo proceso enseguida. Acordate que tiene que ser por exactamente $${monto} ARS, si el monto no coincide no va a poder acreditarse.\n\n¡Mandame la foto del comprobante cuando puedas!`
-        await sendBotReply(ctx, conversation.id, msg)
         return
       }
 
@@ -517,6 +616,21 @@ export async function handleTextMessage(ctx: BotContext) {
         }
 
         try {
+          // Check balance before attempting withdrawal
+          const encSession = (customer.casino_profile as any)?.session
+          let currentBalance: number | null = null
+          if (encSession) {
+            currentBalance = await getBalance(decryptToken(encSession))
+            if (currentBalance !== null && currentBalance < Number(args.amount)) {
+              await sendBotReply(ctx, conversation.id, `No tenés saldo suficiente para retirar $${Number(args.amount).toLocaleString('es-AR')} ARS. Tu saldo actual es: $${currentBalance.toLocaleString('es-AR')} ARS.`)
+              return
+            }
+          }
+
+          const montoRetiro = Number(args.amount).toLocaleString('es-AR')
+          const balanceMsg = currentBalance !== null ? `Tu saldo actual es $${currentBalance.toLocaleString('es-AR')} ARS. ` : ''
+          await sendBotReply(ctx, conversation.id, `${balanceMsg}Procesando retiro por $${montoRetiro} ARS...`)
+
           const success = await createWithdrawal(decryptToken(customer.casino_token), {
             amount: Number(args.amount),
             cbu: (args.cbu as string).trim(),
@@ -571,7 +685,7 @@ export async function handleTextMessage(ctx: BotContext) {
       if (name === 'transfer_to_agent') {
         await supabase
           .from('conversations')
-          .update({ pending_action: { type: 'awaiting_agent_confirmation' } })
+          .update({ pending_action: { type: 'awaiting_agent_confirmation', created_at: Date.now() } })
           .eq('id', conversation.id)
 
         await sendBotReply(ctx, conversation.id, '¿Estás seguro de que querés hablar con un agente humano? Puedo seguir ayudándote yo si preferís 😊')
@@ -614,8 +728,8 @@ export async function handleTextMessage(ctx: BotContext) {
 // -------------------------------------------------------
 // Helper: send bot reply and persist in DB
 // -------------------------------------------------------
-async function sendBotReply(ctx: BotContext, conversationId: string, content: string) {
-  await ctx.reply(content)
+async function sendBotReply(ctx: BotContext, conversationId: string, content: string, options?: { parse_mode?: 'HTML' | 'MarkdownV2' }) {
+  await ctx.reply(content, options)
   await supabase.from('messages').insert({
     conversation_id: conversationId,
     sender_type: 'bot',

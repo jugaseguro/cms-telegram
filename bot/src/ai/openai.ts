@@ -59,18 +59,24 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'request_deposit',
+      description: 'El usuario quiere cargar saldo / hacer un depósito / cargar plata / meter plata. SIEMPRE llamá esta función. NUNCA generes texto preguntando datos del depósito. El sistema le envía las instrucciones automáticamente.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_deposit',
-      description: 'Iniciar un depósito de dinero. Recopila todos los datos necesarios (monto, nombre, apellido, DNI/CUIT/CUIL, email) y luego solicita el comprobante de pago.',
+      description: 'Procesar un depósito cuando YA tenés todos los datos: nombre, apellido y monto. Extraé el monto como número (ignorá signos $, puntos de miles, y la palabra "pesos"). Los nombres van en mayúscula inicial. Solo llamá esta función cuando el usuario ya te pasó los tres datos.',
       parameters: {
         type: 'object',
         properties: {
-          amount: { type: 'number', description: 'Monto en ARS a depositar (entre 100 y 500000)' },
-          first_name: { type: 'string', description: 'Nombre del cliente' },
-          last_name: { type: 'string', description: 'Apellido del cliente' },
-          tax_id: { type: 'string', description: 'DNI, CUIT o CUIL del cliente (8 a 11 dígitos numéricos)' },
-          email: { type: 'string', description: 'Correo electrónico del cliente' },
+          amount: { type: 'number', description: 'Monto en ARS como número (ignorar $, puntos, "pesos"). Ej: "5.000 pesos" → 5000' },
+          first_name: { type: 'string', description: 'Nombre del titular (mayúscula inicial)' },
+          last_name: { type: 'string', description: 'Apellido del titular (mayúscula inicial)' },
         },
-        required: ['amount', 'first_name', 'last_name', 'tax_id', 'email'],
+        required: ['amount', 'first_name', 'last_name'],
       },
     },
   },
@@ -83,8 +89,8 @@ const TOOLS: ChatCompletionTool[] = [
         type: 'object',
         properties: {
           amount: { type: 'number', description: 'Monto en ARS a retirar (entre 100 y 500000)' },
-          cbu: { type: 'string', description: 'CBU bancario de exactamente 22 dígitos' },
-          cuit: { type: 'string', description: 'DNI, CUIT o CUIL del titular (7 a 15 caracteres)' },
+          cbu: { type: 'string', description: 'CBU bancario de 22 dígitos. Si el usuario lo mandó con espacios o guiones, enviá solo los dígitos.' },
+          cuit: { type: 'string', description: 'DNI, CUIT o CUIL del titular. Enviá solo los dígitos, sin guiones (ej: "20-12345678-9" → "20123456789").' },
           account_holder: { type: 'string', description: 'Nombre completo del titular de la cuenta' },
         },
         required: ['amount', 'cbu', 'cuit', 'account_holder'],
