@@ -59,7 +59,8 @@ export function useMessages(conversationId: string | null) {
     }),
     enabled: !!conversationId,
     staleTime: 30_000,
-    gcTime: 2 * 60 * 1000,
+    gcTime: 30_000,
+    refetchOnWindowFocus: false,  // Realtime handles live updates — prevents refetch storm on tab focus
   })
 
   return {

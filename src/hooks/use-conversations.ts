@@ -38,6 +38,7 @@ export function useConversations() {
         throw err
       }
     },
+    refetchOnWindowFocus: false,  // Realtime handles live updates — prevents refetch storm on tab focus
   })
 }
 
