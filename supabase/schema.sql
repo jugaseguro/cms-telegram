@@ -51,7 +51,7 @@ create table public.conversations (
   id uuid primary key default uuid_generate_v4(),
   customer_id uuid not null references public.customers(id) on delete cascade,
   assigned_agent_id uuid references public.profiles(id) on delete set null,
-  status text not null default 'open' check (status in ('open', 'closed', 'pending')),
+  status text not null default 'open' check (status in ('open', 'closed', 'pending', 'waiting_agent')),
   last_message_at timestamptz default now(),
   waiting_since timestamptz,
   first_response_at timestamptz,

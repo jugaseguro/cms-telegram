@@ -83,15 +83,24 @@ const TOOLS: ChatCompletionTool[] = [
   {
     type: 'function',
     function: {
+      name: 'request_withdrawal',
+      description: 'El usuario quiere retirar dinero / hacer un retiro / sacar plata. SIEMPRE llamá esta función. NUNCA generes texto preguntando datos del retiro. El sistema le envía las opciones de método automáticamente.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
       name: 'create_withdrawal',
-      description: 'Procesar un retiro de dinero. Requiere monto, CBU, DNI/CUIT/CUIL y nombre del titular.',
+      description: 'Procesar un retiro de dinero cuando YA tenés todos los datos. Requiere monto, CBU/CVU, DNI/CUIT/CUIL, nombre del titular y opcionalmente el canal (BT o MP).',
       parameters: {
         type: 'object',
         properties: {
-          amount: { type: 'number', description: 'Monto en ARS a retirar (entre 100 y 500000)' },
-          cbu: { type: 'string', description: 'CBU bancario de 22 dígitos. Si el usuario lo mandó con espacios o guiones, enviá solo los dígitos.' },
+          amount: { type: 'number', description: 'Monto en ARS a retirar' },
+          cbu: { type: 'string', description: 'CBU o CVU de 22 dígitos. Si el usuario lo mandó con espacios o guiones, enviá solo los dígitos.' },
           cuit: { type: 'string', description: 'DNI, CUIT o CUIL del titular. Enviá solo los dígitos, sin guiones (ej: "20-12345678-9" → "20123456789").' },
           account_holder: { type: 'string', description: 'Nombre completo del titular de la cuenta' },
+          channel: { type: 'string', enum: ['BT', 'MP'], description: 'Canal de retiro: "BT" (Transferencia Bancaria) o "MP" (Mercado Pago). Si el usuario no especificó, no incluir.' },
         },
         required: ['amount', 'cbu', 'cuit', 'account_holder'],
       },
@@ -139,13 +148,15 @@ const TOOLS: ChatCompletionTool[] = [
 // Excludes sensitive messages (passwords, DNI, CBU, etc.)
 // ============================================================
 
+const HISTORY_GAP_MS = 5 * 60 * 1000 // 5-minute gap = new topic boundary
+
 export async function buildHistory(
   conversationId: string,
   maxMessages: number
 ): Promise<ChatCompletionMessageParam[]> {
   const { data: messages } = await supabase
     .from('messages')
-    .select('sender_type, content')
+    .select('sender_type, content, created_at')
     .eq('conversation_id', conversationId)
     .eq('message_type', 'text')
     .eq('is_sensitive', false)
@@ -156,12 +167,30 @@ export async function buildHistory(
   if (!messages) return []
 
   // Reverse so oldest is first
-  return messages
-    .reverse()
-    .map((m) => ({
+  const reversed = messages.reverse()
+  const result: ChatCompletionMessageParam[] = []
+
+  for (let i = 0; i < reversed.length; i++) {
+    const m = reversed[i]
+
+    // Insert conversation boundary when there's a >5 min gap between messages
+    if (i > 0 && m.created_at && reversed[i - 1].created_at) {
+      const gap = new Date(m.created_at).getTime() - new Date(reversed[i - 1].created_at).getTime()
+      if (gap > HISTORY_GAP_MS) {
+        result.push({
+          role: 'system',
+          content: '[NUEVA CONSULTA — el tema anterior terminó. Respondé solo al nuevo mensaje del usuario.]',
+        })
+      }
+    }
+
+    result.push({
       role: m.sender_type === 'customer' ? 'user' : 'assistant',
       content: (m.content as string).slice(0, 300),
-    } as ChatCompletionMessageParam))
+    })
+  }
+
+  return result
 }
 
 // ============================================================

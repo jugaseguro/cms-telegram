@@ -45,40 +45,24 @@ export function useAiCostsSummary() {
     queryKey: ['ai-costs-summary', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      const now = new Date()
-      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
-
-      let queryAll = supabase
-        .from('ai_usage_logs')
-        .select('cost_usd, total_tokens, created_at')
-
-      let queryMonth = supabase
-        .from('ai_usage_logs')
-        .select('cost_usd, total_tokens')
-        .gte('created_at', startOfMonth)
-
-      if (selectedBotId) {
-        queryAll = queryAll.eq('bot_id', selectedBotId)
-        queryMonth = queryMonth.eq('bot_id', selectedBotId)
+      const { data, error } = await (supabase.rpc as any)('get_ai_costs_summary', selectedBotId ? { p_bot_id: selectedBotId } : {})
+      
+      if (error) throw error
+      const result = data?.[0] || {
+        total_cost: 0,
+        total_tokens: 0,
+        month_cost: 0,
+        month_tokens: 0,
+        call_count: 0
       }
 
-      const [allResult, monthResult] = await Promise.all([queryAll, queryMonth])
-      if (allResult.error) throw allResult.error
-      if (monthResult.error) throw monthResult.error
-
-      const totalCost = (allResult.data ?? []).reduce((sum, r) => sum + Number(r.cost_usd), 0)
-      const totalTokens = (allResult.data ?? []).reduce((sum, r) => sum + r.total_tokens, 0)
-      const monthCost = (monthResult.data ?? []).reduce((sum, r) => sum + Number(r.cost_usd), 0)
-      const monthTokens = (monthResult.data ?? []).reduce((sum, r) => sum + r.total_tokens, 0)
-      const callCount = allResult.data?.length ?? 0
-
       return {
-        totalCost,
-        totalTokens,
-        monthCost,
-        monthTokens,
-        callCount,
-        avgCostPerCall: callCount > 0 ? totalCost / callCount : 0,
+        totalCost: Number(result.total_cost || 0),
+        totalTokens: Number(result.total_tokens || 0),
+        monthCost: Number(result.month_cost || 0),
+        monthTokens: Number(result.month_tokens || 0),
+        callCount: Number(result.call_count || 0),
+        avgCostPerCall: result.call_count > 0 ? Number(result.total_cost) / Number(result.call_count) : 0,
       }
     },
   })

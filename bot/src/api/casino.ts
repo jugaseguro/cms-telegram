@@ -105,6 +105,16 @@ export async function registerCasino(params: RegisterParams): Promise<boolean> {
   }
 }
 
+// Quick JWT validation — checks if the JWT is still accepted by the casino API
+export async function validateJwtQuick(jwt: string): Promise<boolean> {
+  try {
+    const providerId = await getProviderId(jwt)
+    return providerId !== null
+  } catch {
+    return false
+  }
+}
+
 export async function getBalance(session: string): Promise<number | null> {
   try {
     const response = await axios.post(
@@ -115,7 +125,9 @@ export async function getBalance(session: string): Promise<number | null> {
     if (response.data?.result !== 'OK') return null
     const accounts = response.data?.accounts as any[] | undefined
     const cash = accounts?.find((a: any) => a.account === 'CASH')
-    return cash?.amount ?? null
+    if (cash?.amount == null) return null
+    // API returns amount in cents — convert to pesos
+    return cash.amount / 100
   } catch {
     return null
   }
@@ -128,19 +140,39 @@ export interface DepositParams {
   paymentId: string
 }
 
-export async function getProviderId(jwt: string): Promise<string | null> {
+export async function getProviderId(jwt: string, channel = 'BT'): Promise<string | null> {
   try {
     const res = await axios.get(PROVIDERS_URL, {
       headers: { Authorization: `Bearer ${jwt}` },
       timeout: TIMEOUT,
     })
     const providers = res.data?.providers || []
+
+    // Find provider that has the requested channel enabled
     for (const provider of providers) {
-      if (provider.p) return provider.p
+      const channels = provider.pp?.ch as any[] | undefined
+      if (channels) {
+        const match = channels.find((ch: any) => ch.v === channel && ch.e === true)
+        if (match && provider.p) {
+          console.log(`[getProviderId] Found provider ${provider.pp?.n} (${provider.p}) with channel ${channel}`)
+          return provider.p
+        }
+      }
     }
+
+    // Fallback: if no channel match, return first provider with deposit support
+    for (const provider of providers) {
+      if (provider.p) {
+        console.log(`[getProviderId] No provider with channel "${channel}", falling back to first: ${provider.pp?.n} (${provider.p})`)
+        return provider.p
+      }
+    }
+
+    console.error('[getProviderId] No provider found')
     return null
   } catch (err: any) {
     if (err.response?.status === 401) throw new CasinoAuthError()
+    console.error('[getProviderId] Error:', err.response?.status, JSON.stringify(err.response?.data))
     return null
   }
 }
@@ -166,9 +198,11 @@ export async function createDeposit(
 
     const url = res.data?.url
     if (url) return { url }
+    console.error('[createDeposit] No URL in response:', JSON.stringify(res.data))
     return null
   } catch (err: any) {
     if (err.response?.status === 401) throw new CasinoAuthError()
+    console.error('[createDeposit] Error:', err.response?.status, JSON.stringify(err.response?.data))
     return null
   }
 }
@@ -178,6 +212,8 @@ export interface WithdrawParams {
   cbu: string
   cuitl: string
   accountHolder: string
+  paymentId: string
+  channel: string
 }
 
 export async function createWithdrawal(
@@ -191,16 +227,24 @@ export async function createWithdrawal(
       cuitl: params.cuitl,
       accountHolder: params.accountHolder,
       currency: 'ARS',
+      paymentId: params.paymentId,
+      channel: params.channel,
     }
+
+    console.log(`[createWithdrawal] URL: ${WITHDRAW_URL}`)
+    console.log(`[createWithdrawal] Payload:`, JSON.stringify(payload))
 
     const res = await axios.post(WITHDRAW_URL, payload, {
       headers: { ...HEADERS, Authorization: `Bearer ${jwt}` },
       timeout: TIMEOUT,
     })
 
-    return res.data?.error === false
+    console.log(`[createWithdrawal] Response status: ${res.status}`, JSON.stringify(res.data))
+    // Success: API returns 200/201 with txid, or error: false
+    return !!(res.data?.txid) || res.data?.error === false
   } catch (err: any) {
     if (err.response?.status === 401) throw new CasinoAuthError()
+    console.error(`[createWithdrawal] Error: ${err.response?.status}`, JSON.stringify(err.response?.data))
     return false
   }
 }

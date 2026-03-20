@@ -42,7 +42,7 @@ export const ConversationItem = memo(function ConversationItem({
         isActive
           ? 'bg-primary/10 shadow-sm shadow-primary/5 ring-1 ring-primary/15'
           : isRequestingAgent
-          ? 'bg-blue-50 dark:bg-blue-950/40 ring-1 ring-blue-300 dark:ring-blue-700/60 hover:bg-blue-100 dark:hover:bg-blue-900/40'
+          ? 'bg-green-50 dark:bg-green-950/40 ring-1 ring-green-300 dark:ring-green-700/60 hover:bg-green-100 dark:hover:bg-green-900/40'
           : isPendingDeposit
           ? 'bg-red-100 dark:bg-red-950/60 ring-1 ring-red-300 dark:ring-red-800 animate-pulse hover:bg-red-200 dark:hover:bg-red-900/60'
           : isWaitingAgent
@@ -58,7 +58,7 @@ export const ConversationItem = memo(function ConversationItem({
           'h-11 w-11 transition-all duration-200',
           isUnread && 'ring-2 ring-emerald-500 ring-offset-2 ring-offset-background',
           isActive && 'ring-2 ring-primary/40 ring-offset-2 ring-offset-background',
-          isRequestingAgent && 'ring-2 ring-blue-400 ring-offset-2 ring-offset-background',
+          isRequestingAgent && 'ring-2 ring-green-400 ring-offset-2 ring-offset-background',
           isPendingDeposit && 'ring-2 ring-red-400 ring-offset-2 ring-offset-background',
           isWaitingAgent && 'ring-2 ring-yellow-400 ring-offset-2 ring-offset-background',
         )}>
@@ -67,7 +67,7 @@ export const ConversationItem = memo(function ConversationItem({
             isActive
               ? 'bg-primary/15 text-primary'
               : isRequestingAgent
-              ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/50 dark:text-blue-300'
+              ? 'bg-green-100 text-green-700 dark:bg-green-900/50 dark:text-green-300'
               : isPendingDeposit
               ? 'bg-red-200 text-red-700 dark:bg-red-900/50 dark:text-red-300'
               : isWaitingAgent
@@ -80,7 +80,7 @@ export const ConversationItem = memo(function ConversationItem({
           </AvatarFallback>
         </Avatar>
         {isRequestingAgent && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-background bg-blue-500 shadow-sm">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4.5 w-4.5 items-center justify-center rounded-full border-2 border-background bg-green-500 shadow-sm">
             <Headset className="h-2.5 w-2.5 text-white" />
           </span>
         )}
@@ -154,8 +154,14 @@ export const ConversationItem = memo(function ConversationItem({
         )}
 
         {/* Row 3: Labels + Waiting (only if present) */}
-        {((conversation.conversation_labels?.length ?? 0) > 0 || conversation.waiting_since) && (
+        {((conversation.conversation_labels?.length ?? 0) > 0 || conversation.waiting_since || isRequestingAgent) && (
           <div className="flex items-center gap-1.5 flex-wrap">
+            {isRequestingAgent && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-green-500 px-2 py-px text-[10px] font-semibold text-white leading-4">
+                <Headset className="h-2.5 w-2.5" />
+                Ayuda
+              </span>
+            )}
             {conversation.waiting_since && (
               <WaitingBadge waitingSince={conversation.waiting_since} compact />
             )}
