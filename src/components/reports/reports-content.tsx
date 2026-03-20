@@ -63,38 +63,33 @@ export function ReportsContent() {
     queryKey: ['reports-stats', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      let custAll = supabase.from('customers').select('id', { count: 'exact', head: true })
-      let convQuery = supabase.from('conversations').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
-      let txConfQ = supabase.from('transactions').select('id, amount', { count: 'exact' }).eq('status', 'confirmed').gte('created_at', range.start).lte('created_at', range.end)
-      let txPendQ = supabase.from('transactions').select('id', { count: 'exact', head: true }).eq('status', 'pending').gte('created_at', range.start).lte('created_at', range.end)
-      let txAllQ = supabase.from('transactions').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
-      let newCustQ = supabase.from('customers').select('id', { count: 'exact', head: true }).gte('created_at', range.start).lte('created_at', range.end)
+      const args: any = {
+        p_start: range.start,
+        p_end: range.end,
+      }
+      if (selectedBotId) args.p_bot_id = selectedBotId
 
-      if (selectedBotId) {
-        custAll = custAll.eq('bot_id', selectedBotId)
-        convQuery = convQuery.eq('bot_id', selectedBotId)
-        txConfQ = txConfQ.eq('bot_id', selectedBotId)
-        txPendQ = txPendQ.eq('bot_id', selectedBotId)
-        txAllQ = txAllQ.eq('bot_id', selectedBotId)
-        newCustQ = newCustQ.eq('bot_id', selectedBotId)
+      const { data, error } = await (supabase.rpc as any)('get_reports_stats', args)
+      if (error) throw error
+
+      const stats = data?.[0] || {
+        total_customers: 0,
+        new_customers: 0,
+        total_conversations: 0,
+        confirmed_transactions: 0,
+        pending_transactions: 0,
+        total_transactions: 0,
+        confirmed_amount: 0
       }
 
-      const [customers, conversations, txConfirmed, txPending, txAll, newCustomers] =
-        await Promise.all([custAll, convQuery, txConfQ, txPendQ, txAllQ, newCustQ])
-
-      const confirmedTotal = txConfirmed.data?.reduce(
-        (sum, tx) => sum + Number(tx.amount),
-        0
-      ) ?? 0
-
       return {
-        totalCustomers: customers.count ?? 0,
-        newCustomers: newCustomers.count ?? 0,
-        conversations: conversations.count ?? 0,
-        confirmedTransactions: txConfirmed.count ?? 0,
-        pendingTransactions: txPending.count ?? 0,
-        totalTransactions: txAll.count ?? 0,
-        confirmedAmount: confirmedTotal,
+        totalCustomers: Number(stats.total_customers || 0),
+        newCustomers: Number(stats.new_customers || 0),
+        conversations: Number(stats.total_conversations || 0),
+        confirmedTransactions: Number(stats.confirmed_transactions || 0),
+        pendingTransactions: Number(stats.pending_transactions || 0),
+        totalTransactions: Number(stats.total_transactions || 0),
+        confirmedAmount: Number(stats.confirmed_amount || 0),
       }
     },
   })
@@ -103,24 +98,18 @@ export function ReportsContent() {
     queryKey: ['reports-chart', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      let convQ = supabase.from('conversations').select('created_at').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
-      let txQ = supabase.from('transactions').select('created_at, status').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
-      let custQ = supabase.from('customers').select('created_at').gte('created_at', range.start).lte('created_at', range.end).order('created_at')
-
-      if (selectedBotId) {
-        convQ = convQ.eq('bot_id', selectedBotId)
-        txQ = txQ.eq('bot_id', selectedBotId)
-        custQ = custQ.eq('bot_id', selectedBotId)
+      const truncText = period === 'day' ? 'hour' : period === 'month' ? 'day' : 'month'
+      const args: any = {
+        p_trunc_text: truncText,
+        p_start: range.start,
+        p_end: range.end,
       }
+      if (selectedBotId) args.p_bot_id = selectedBotId
 
-      const [convData, txData, custData] = await Promise.all([convQ, txQ, custQ])
+      const { data, error } = await (supabase.rpc as any)('get_reports_chart_series', args)
+      if (error) throw error
 
-      return groupByPeriod(
-        period,
-        convData.data ?? [],
-        txData.data ?? [],
-        custData.data ?? []
-      )
+      return formatChartSeries(period, data || [])
     },
   })
 
@@ -220,12 +209,7 @@ export function ReportsContent() {
   )
 }
 
-function groupByPeriod(
-  period: Period,
-  conversations: { created_at: string }[],
-  transactions: { created_at: string; status: string }[],
-  customers: { created_at: string }[]
-) {
+function formatChartSeries(period: Period, rows: any[]) {
   const buckets = new Map<
     string,
     { label: string; conversaciones: number; transacciones: number; clientes: number; pagados: number }
@@ -250,19 +234,7 @@ function groupByPeriod(
     return buckets.get(key)!
   }
 
-  for (const c of conversations) {
-    ensureBucket(getKey(c.created_at)).conversaciones++
-  }
-  for (const t of transactions) {
-    const b = ensureBucket(getKey(t.created_at))
-    b.transacciones++
-    if (t.status === 'confirmed') b.pagados++
-  }
-  for (const c of customers) {
-    ensureBucket(getKey(c.created_at)).clientes++
-  }
-
-  // Fill in missing slots
+  // Fill in missing slots first to guarantee chronological sorting
   if (period === 'day') {
     const now = new Date().getHours()
     for (let h = 0; h <= now; h++) {
@@ -279,6 +251,16 @@ function groupByPeriod(
     for (let m = 0; m <= now; m++) {
       ensureBucket(months[m])
     }
+  }
+
+  // Populate actual data
+  for (const row of rows) {
+    if (!row.bucket) continue
+    const b = ensureBucket(getKey(row.bucket))
+    b.conversaciones += Number(row.conversations_count || 0)
+    b.transacciones += Number(row.transactions_count || 0)
+    b.pagados += Number(row.paid_transactions_count || 0)
+    b.clientes += Number(row.customers_count || 0)
   }
 
   return Array.from(buckets.values()).sort((a, b) => {

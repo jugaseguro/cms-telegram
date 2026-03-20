@@ -86,9 +86,10 @@ export function useRealtimeConversations(enabled = true) {
   const stuckTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const debouncedInvalidateConversations = useCallback(() => {
-    clearTimeout(debounceTimer.current)
+    if (debounceTimer.current) return
     debounceTimer.current = setTimeout(() => {
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      debounceTimer.current = undefined
     }, 500)
   }, [queryClient])
 

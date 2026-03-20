@@ -40,4 +40,15 @@ export async function handleStart(ctx: BotContext) {
     'Escribe tu consulta y un agente te responderá a la brevedad.'
 
   await ctx.reply(welcomeText)
+
+  // Send and pin a short help message
+  const menuText =
+    '📌 Para cualquier inconveniente o consulta, podés escribir *"quiero un agente"* y te conectamos con una persona real.'
+
+  const menuMsg = await ctx.reply(menuText, { parse_mode: 'Markdown' })
+  try {
+    await ctx.api.pinChatMessage(ctx.chat!.id, menuMsg.message_id, { disable_notification: true })
+  } catch (e) {
+    console.log('[start] Could not pin menu message:', e)
+  }
 }
