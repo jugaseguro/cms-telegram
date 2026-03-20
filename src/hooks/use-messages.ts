@@ -60,7 +60,10 @@ export function useMessages(conversationId: string | null) {
     staleTime: 30_000,
     gcTime: 2 * 60 * 1000,
     retry: (failureCount, error) => {
-      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') return false
+      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') {
+        if (typeof window !== 'undefined') window.location.reload()
+        return false
+      }
       return failureCount < 3
     },
   })
