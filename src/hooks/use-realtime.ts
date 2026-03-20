@@ -60,9 +60,16 @@ export function useRealtimeMessages(conversationId: string | null) {
           if (isFirstSubscription.current) {
             isFirstSubscription.current = false
           } else {
-            queryClient.invalidateQueries({
-              queryKey: ['messages', conversationId],
-            })
+            // Guard: don't invalidate if the query is already fetching or in error state.
+            // Error state → invalidating starts a 15s timeout → another error → endless cascade.
+            const queryState = queryClient.getQueryState(['messages', conversationId])
+            const isAlreadyFetching = queryState?.fetchStatus === 'fetching'
+            const isError = queryState?.status === 'error'
+            if (!isAlreadyFetching && !isError) {
+              queryClient.invalidateQueries({
+                queryKey: ['messages', conversationId],
+              })
+            }
           }
         }
       })
@@ -195,11 +202,14 @@ export function useRealtimeConversations(enabled = true) {
             // Invalidate on first subscribe to ensure fresh data after auth
             queryClient.invalidateQueries({ queryKey: ['conversations'] })
           } else {
-            // WebSocket reconnected — only refresh conversations list.
-            // Individual message queries are managed by useRealtimeMessages
-            // per conversation, so a global messages invalidation is not needed
-            // and would trigger many parallel fetches.
-            queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            // WebSocket reconnected — refresh conversations list only if it's not
+            // already loading or in an error state (to avoid cascading timeouts)
+            const convState = queryClient.getQueryState(['conversations'])
+            const convFetching = convState?.fetchStatus === 'fetching'
+            const convError = convState?.status === 'error'
+            if (!convFetching && !convError) {
+              queryClient.invalidateQueries({ queryKey: ['conversations'] })
+            }
             toast.success('Conexión restablecida', { duration: 3000 })
           }
           setStatus('connected')
