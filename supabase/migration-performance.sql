@@ -2,6 +2,14 @@
 -- Se han agregado sobrecargas sin parámetros y SECURITY DEFINER 
 -- para evitar errores 400 Bad Request en PostgREST y problemas de RLS.
 
+-- Primero, eliminamos las versiones anteriores que causan conflicto (42P13)
+DROP FUNCTION IF EXISTS get_ai_costs_summary(uuid);
+DROP FUNCTION IF EXISTS get_ai_costs_summary();
+DROP FUNCTION IF EXISTS get_reports_stats(timestamp with time zone, timestamp with time zone, uuid);
+DROP FUNCTION IF EXISTS get_reports_stats(timestamp with time zone, timestamp with time zone);
+DROP FUNCTION IF EXISTS get_reports_chart_series(text, timestamp with time zone, timestamp with time zone, uuid);
+DROP FUNCTION IF EXISTS get_reports_chart_series(text, timestamp with time zone, timestamp with time zone);
+
 -- 1. get_ai_costs_summary (Sin Bot ID)
 CREATE OR REPLACE FUNCTION get_ai_costs_summary()
 RETURNS TABLE (
