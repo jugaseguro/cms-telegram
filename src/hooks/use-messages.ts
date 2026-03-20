@@ -17,22 +17,32 @@ export function useMessages(conversationId: string | null) {
     queryKey: ['messages', conversationId],
     queryFn: async ({ pageParam }) => {
       if (!conversationId) return []
-      let q = supabase
-        .from('messages')
-        .select(MESSAGE_COLUMNS)
-        .eq('conversation_id', conversationId)
-        .order('created_at', { ascending: false })
-        .order('id', { ascending: false })
-        .limit(PAGE_SIZE)
-      if (pageParam) {
-        // Composite cursor: get messages older than cursor OR same timestamp with smaller id
-        q = q.or(
-          `created_at.lt.${pageParam.created_at},and(created_at.eq.${pageParam.created_at},id.lt.${pageParam.id})`
-        )
-      }
-      const { data, error } = await q
-      if (error) throw error
-      return ((data as Message[]) ?? []).reverse()
+      const fetchPromise = (async () => {
+        let q = supabase
+          .from('messages')
+          .select(MESSAGE_COLUMNS)
+          .eq('conversation_id', conversationId)
+          .order('created_at', { ascending: false })
+          .order('id', { ascending: false })
+          .limit(PAGE_SIZE)
+        if (pageParam) {
+          // Composite cursor: get messages older than cursor OR same timestamp with smaller id
+          q = q.or(
+            `created_at.lt.${pageParam.created_at},and(created_at.eq.${pageParam.created_at},id.lt.${pageParam.id})`
+          )
+        }
+        const { data, error } = await q
+        if (error) throw error
+        return ((data as Message[]) ?? []).reverse()
+      })()
+
+      // Force timeout after 12 seconds to prevent Supabase token refresh queue from hanging the UI
+      return Promise.race([
+        fetchPromise,
+        new Promise<Message[]>((_, reject) =>
+          setTimeout(() => reject(new Error('SUPABASE_TIMEOUT')), 12000)
+        ),
+      ])
     },
     initialPageParam: null as PageCursor | null,
     getNextPageParam: (lastPage): PageCursor | undefined => {
