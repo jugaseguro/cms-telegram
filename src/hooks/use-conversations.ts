@@ -2,10 +2,10 @@ import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tansta
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { useBotStore } from '@/stores/bot-store'
-import { getGlobalSignal } from '@/hooks/use-session-recovery'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 const supabase = createClient()
+const FETCH_TIMEOUT_MS = 15_000
 
 export function useConversations() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
@@ -18,12 +18,19 @@ export function useConversations() {
     queryFn: async () => {
       console.log(`[useConversations] Fetching conversations list...`)
       const startTime = Date.now()
+
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => {
+        console.warn(`[useConversations] Fetch timed out after ${FETCH_TIMEOUT_MS}ms — aborting`)
+        controller.abort()
+      }, FETCH_TIMEOUT_MS)
+
       let query = supabase
         .from('conversations')
         .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
         .order('last_message_at', { ascending: false })
         .limit(150)
-        .abortSignal(getGlobalSignal())
+        .abortSignal(controller.signal)
 
       if (selectedBotId) {
         query = query.eq('bot_id', selectedBotId)
@@ -31,12 +38,18 @@ export function useConversations() {
 
       try {
         const { data, error } = await query
+        clearTimeout(timeoutId)
         const elapsed = Date.now() - startTime
         console.log(`[useConversations] Fetch complete in ${elapsed}ms`, { count: data?.length, error })
 
         if (error) throw error
         return data as ConversationWithCustomerAndLabels[]
       } catch (err) {
+        clearTimeout(timeoutId)
+        if ((err as Error)?.name === 'AbortError') {
+          console.error(`[useConversations] Fetch timed out`)
+          throw new Error('SUPABASE_TIMEOUT')
+        }
         console.error(`[useConversations] Fetch failed!`, err)
         throw err
       }
