@@ -7,15 +7,19 @@ import { useChatStore } from '@/stores/chat-store'
 import { ConversationItem } from './conversation-item'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { Input } from '@/components/ui/input'
-import { Search, MessageSquareOff } from 'lucide-react'
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Search, MessageSquareOff, Bot, Headset } from 'lucide-react'
 import { QueryError } from '@/components/ui/query-error'
 
 export function ConversationList() {
   const {
     activeConversationId,
     searchQuery,
+    tabFilter,
+    unreadConversationIds,
     setActiveConversation,
     setSearchQuery,
+    setTabFilter,
   } = useChatStore()
 
   const queryClient = useQueryClient()
@@ -26,17 +30,35 @@ export function ConversationList() {
   )
 
   const filtered = useMemo(() => conversations?.filter((c) => {
+    // Tab filter
+    const belongsToAgent = c.assigned_agent_id !== null || c.status === 'waiting_agent'
+    if (tabFilter === 'agent' && !belongsToAgent) return false
+    if (tabFilter === 'bot' && belongsToAgent) return false
+
+    // Search filter
     if (!searchQuery) return true
     const customer = c.customers
     const name =
       [customer.first_name, customer.last_name].filter(Boolean).join(' ') +
       (customer.telegram_username || '')
     return name.toLowerCase().includes(searchQuery.toLowerCase())
-  }), [conversations, searchQuery])
+  }), [conversations, searchQuery, tabFilter])
+
+  const tabCounts = useMemo(() => {
+    if (!conversations) return { bot: 0, agent: 0 }
+    let bot = 0, agent = 0
+    for (const c of conversations) {
+      if (!unreadConversationIds.has(c.id)) continue
+      const isAgent = c.assigned_agent_id !== null || c.status === 'waiting_agent'
+      if (isAgent) agent++
+      else bot++
+    }
+    return { bot, agent }
+  }, [conversations, unreadConversationIds])
 
   return (
     <div className="flex h-full flex-col border-r bg-card/40">
-      <div className="border-b p-4">
+      <div className="border-b p-4 space-y-3">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -46,9 +68,34 @@ export function ConversationList() {
             className="pl-9 bg-muted/50 border-transparent focus:border-primary/30 focus:bg-background transition-all duration-200"
           />
         </div>
+        <Tabs
+          value={tabFilter}
+          onValueChange={(val) => setTabFilter(val as 'bot' | 'agent')}
+        >
+          <TabsList className="w-full">
+            <TabsTrigger value="bot" className="flex-1 gap-1.5">
+              <Bot className="h-3.5 w-3.5" />
+              Bot
+              {tabCounts.bot > 0 && (
+                <span className="ml-0.5 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white leading-4">
+                  {tabCounts.bot}
+                </span>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="agent" className="flex-1 gap-1.5">
+              <Headset className="h-3.5 w-3.5" />
+              Agente
+              {tabCounts.agent > 0 && (
+                <span className="ml-0.5 rounded-full bg-emerald-500 px-1.5 text-[10px] font-bold text-white leading-4">
+                  {tabCounts.agent}
+                </span>
+              )}
+            </TabsTrigger>
+          </TabsList>
+        </Tabs>
       </div>
       <ScrollArea className="flex-1">
-        <div className="space-y-1 p-2">
+        <div className="divide-y divide-border/40 p-2">
           {isLoading && (
             <div className="flex flex-col gap-3 p-4">
               {Array.from({ length: 5 }).map((_, i) => (
@@ -74,7 +121,7 @@ export function ConversationList() {
             </div>
           )}
           {filtered?.map((conversation) => (
-            <div key={conversation.id} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' }}>
+            <div key={conversation.id} className="py-0.5" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' }}>
               <ConversationItem
                 conversation={conversation}
                 isActive={conversation.id === activeConversationId}
