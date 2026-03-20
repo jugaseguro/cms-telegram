@@ -38,6 +38,10 @@ export function useConversations() {
         ),
       ])
     },
+    retry: (failureCount, error) => {
+      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') return false
+      return failureCount < 3
+    },
   })
 }
 
