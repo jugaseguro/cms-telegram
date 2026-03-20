@@ -24,12 +24,12 @@ DECLARE
 BEGIN
   RETURN QUERY
   SELECT
-    COALESCE(SUM(cost_usd), 0) AS total_cost,
-    COALESCE(SUM(total_tokens), 0) AS total_tokens,
-    COALESCE(SUM(CASE WHEN created_at >= start_of_month THEN cost_usd ELSE 0 END), 0) AS month_cost,
-    COALESCE(SUM(CASE WHEN created_at >= start_of_month THEN total_tokens ELSE 0 END), 0) AS month_tokens,
+    COALESCE(SUM(l.cost_usd), 0) AS total_cost,
+    COALESCE(SUM(l.total_tokens), 0) AS total_tokens,
+    COALESCE(SUM(CASE WHEN l.created_at >= start_of_month THEN l.cost_usd ELSE 0 END), 0) AS month_cost,
+    COALESCE(SUM(CASE WHEN l.created_at >= start_of_month THEN l.total_tokens ELSE 0 END), 0) AS month_tokens,
     COUNT(*) AS call_count
-  FROM public.ai_usage_logs;
+  FROM public.ai_usage_logs l;
 END;
 $$;
 
@@ -47,13 +47,13 @@ DECLARE
 BEGIN
   RETURN QUERY
   SELECT
-    COALESCE(SUM(cost_usd), 0) AS total_cost,
-    COALESCE(SUM(total_tokens), 0) AS total_tokens,
-    COALESCE(SUM(CASE WHEN created_at >= start_of_month THEN cost_usd ELSE 0 END), 0) AS month_cost,
-    COALESCE(SUM(CASE WHEN created_at >= start_of_month THEN total_tokens ELSE 0 END), 0) AS month_tokens,
+    COALESCE(SUM(l.cost_usd), 0) AS total_cost,
+    COALESCE(SUM(l.total_tokens), 0) AS total_tokens,
+    COALESCE(SUM(CASE WHEN l.created_at >= start_of_month THEN l.cost_usd ELSE 0 END), 0) AS month_cost,
+    COALESCE(SUM(CASE WHEN l.created_at >= start_of_month THEN l.total_tokens ELSE 0 END), 0) AS month_tokens,
     COUNT(*) AS call_count
-  FROM public.ai_usage_logs
-  WHERE bot_id = p_bot_id;
+  FROM public.ai_usage_logs l
+  WHERE l.bot_id = p_bot_id;
 END;
 $$;
 
