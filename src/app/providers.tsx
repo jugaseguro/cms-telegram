@@ -31,7 +31,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         defaultOptions: {
           queries: {
             staleTime: 30_000,
-            refetchOnWindowFocus: true,
+            refetchOnWindowFocus: false,  // Realtime WebSockets handle live updates; refetching all queries on tab focus caused connection saturation and UI freezes
             retry: 2,
             retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
           },

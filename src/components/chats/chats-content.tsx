@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useChatStore } from '@/stores/chat-store'
 import { useConversations } from '@/hooks/use-conversations'
 import { ConversationList } from '@/components/chats/conversation-list'
@@ -15,9 +15,17 @@ import {
 import { MessageSquare } from 'lucide-react'
 
 export function ChatsContent() {
-  const { activeConversationId } = useChatStore()
+  const { activeConversationId, setActiveConversation } = useChatStore()
   const { data: conversations } = useConversations()
   const [profileOpen, setProfileOpen] = useState(false)
+
+  // Clear active conversation when leaving the chats page to prevent
+  // stale WebSocket subscriptions and message queries on other pages
+  useEffect(() => {
+    return () => {
+      setActiveConversation(null)
+    }
+  }, [setActiveConversation])
 
   const activeConversation = conversations?.find(
     (c) => c.id === activeConversationId
