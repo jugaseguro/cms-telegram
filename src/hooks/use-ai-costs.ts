@@ -45,7 +45,9 @@ export function useAiCostsSummary() {
     queryKey: ['ai-costs-summary', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      const { data, error } = await (supabase.rpc as any)('get_ai_costs_summary', selectedBotId ? { p_bot_id: selectedBotId } : {})
+      const args: any = {}
+      if (selectedBotId) args.p_bot_id = selectedBotId
+      const { data, error } = await (supabase.rpc as any)('get_ai_costs_summary', Object.keys(args).length > 0 ? args : undefined)
       
       if (error) throw error
       const result = data?.[0] || {
