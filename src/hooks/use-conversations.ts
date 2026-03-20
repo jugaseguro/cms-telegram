@@ -14,20 +14,29 @@ export function useConversations() {
     queryKey: ['conversations', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      let query = supabase
-        .from('conversations')
-        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
-        .order('last_message_at', { ascending: false })
-        .limit(150)
+      const fetchPromise = (async () => {
+        let query = supabase
+          .from('conversations')
+          .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
+          .order('last_message_at', { ascending: false })
+          .limit(150)
 
-      if (selectedBotId) {
-        query = query.eq('bot_id', selectedBotId)
-      }
+        if (selectedBotId) {
+          query = query.eq('bot_id', selectedBotId)
+        }
 
-      const { data, error } = await query
+        const { data, error } = await query
 
-      if (error) throw error
-      return data as ConversationWithCustomerAndLabels[]
+        if (error) throw error
+        return data as ConversationWithCustomerAndLabels[]
+      })()
+
+      return Promise.race([
+        fetchPromise,
+        new Promise<ConversationWithCustomerAndLabels[]>((_, reject) =>
+          setTimeout(() => reject(new Error('SUPABASE_TIMEOUT')), 12000)
+        ),
+      ])
     },
   })
 }

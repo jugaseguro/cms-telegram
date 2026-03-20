@@ -26,9 +26,11 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
   const {
     data: messages,
     isLoading,
+    isError,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage,
+    refetch,
   } = useMessages(conversation.id)
   useRealtimeMessages(conversation.id)
   const { data: conversationLabels } = useConversationLabels(conversation.id)
@@ -220,9 +222,23 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
             </Button>
           </div>
         )}
-        {isLoading && (
+        {isLoading && !isError && (
           <div className="flex justify-center py-8">
             <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        )}
+        {isError && (
+          <div className="flex flex-col items-center justify-center py-10 gap-3 text-muted-foreground mt-10">
+            <div className="rounded-full bg-muted p-3">
+              <BotOff className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-medium">Conexión interrumpida</p>
+            <p className="text-xs text-center max-w-[250px]">
+              No se pudieron cargar los mensajes. Si la app estuvo inactiva un rato, la sesión puede haberse suspendido.
+            </p>
+            <Button variant="outline" size="sm" className="mt-2" onClick={() => refetch()}>
+              Reintentar
+            </Button>
           </div>
         )}
 
