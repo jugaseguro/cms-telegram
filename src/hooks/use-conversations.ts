@@ -39,7 +39,10 @@ export function useConversations() {
       ])
     },
     retry: (failureCount, error) => {
-      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') return false
+      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') {
+        if (typeof window !== 'undefined') window.location.reload()
+        return false
+      }
       return failureCount < 3
     },
   })
