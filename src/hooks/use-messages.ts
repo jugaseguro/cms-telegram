@@ -6,6 +6,12 @@ const supabase = createClient()
 
 const MESSAGE_COLUMNS = 'id, conversation_id, sender_type, sender_id, content, message_type, media_url, telegram_message_id, is_internal, created_at'
 const PAGE_SIZE = 50
+
+// Promise.race timeout — the ONLY reliable way to stop a hanging Supabase query.
+// AbortSignal only reaches the HTTP fetch layer, NOT Supabase's internal auth token
+// refresh step. When the auth queue is stuck after device sleep, AbortSignal has no
+// effect. Promise.race creates a completely independent timer that resolves/rejects
+// regardless of what Supabase is doing internally.
 const FETCH_TIMEOUT_MS = 15_000
 
 interface PageCursor {
@@ -20,15 +26,6 @@ export function useMessages(conversationId: string | null) {
       console.log(`[useMessages] Fetching page for conversation: ${conversationId}`, pageParam)
       if (!conversationId) return []
 
-      // Per-fetch AbortController with 15s timeout — each fetch is fully independent.
-      // If Supabase's internal auth queue gets stuck after a visibility change,
-      // this controller will abort the hanging request and let React Query show error state.
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => {
-        console.warn(`[useMessages] Fetch timed out after ${FETCH_TIMEOUT_MS}ms — aborting`)
-        controller.abort()
-      }, FETCH_TIMEOUT_MS)
-
       const startTime = Date.now()
       let q = supabase
         .from('messages')
@@ -37,7 +34,6 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(PAGE_SIZE)
-        .abortSignal(controller.signal)
 
       if (pageParam) {
         const cursor = pageParam as PageCursor
@@ -46,26 +42,25 @@ export function useMessages(conversationId: string | null) {
         )
       }
 
-      try {
-        const { data, error } = await q
-        clearTimeout(timeoutId)
+      const fetchPromise = q.then(({ data, error }) => {
         const elapsed = Date.now() - startTime
         console.log(`[useMessages] Fetch complete in ${elapsed}ms`, { count: data?.length, error })
         if (error) throw error
         return ((data as Message[]) ?? []).reverse()
-      } catch (err) {
-        clearTimeout(timeoutId)
-        if ((err as Error)?.name === 'AbortError') {
-          throw new Error('SUPABASE_TIMEOUT')
-        }
-        console.error(`[useMessages] Fetch failed!`, err)
-        throw err
-      }
+      })
+
+      const timeoutPromise = new Promise<Message[]>((_, reject) =>
+        setTimeout(() => {
+          console.warn(`[useMessages] Fetch timed out after ${FETCH_TIMEOUT_MS}ms`)
+          reject(new Error('SUPABASE_TIMEOUT'))
+        }, FETCH_TIMEOUT_MS)
+      )
+
+      return Promise.race([fetchPromise, timeoutPromise])
     },
     initialPageParam: null as PageCursor | null,
     getNextPageParam: (lastPage): PageCursor | undefined => {
       if (lastPage.length < PAGE_SIZE) return undefined
-      // Cursor is the oldest message in the page (first after reverse)
       const oldest = lastPage[0]
       if (!oldest) return undefined
       return { created_at: oldest.created_at, id: oldest.id }
@@ -79,7 +74,6 @@ export function useMessages(conversationId: string | null) {
     gcTime: 2 * 60_000,
     refetchOnWindowFocus: false,
     retry: (failureCount, error) => {
-      // Don't retry on timeout — show error state immediately so user can click retry
       if ((error as Error)?.message === 'SUPABASE_TIMEOUT') return false
       return failureCount < 2
     },

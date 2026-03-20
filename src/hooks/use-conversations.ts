@@ -19,40 +19,31 @@ export function useConversations() {
       console.log(`[useConversations] Fetching conversations list...`)
       const startTime = Date.now()
 
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => {
-        console.warn(`[useConversations] Fetch timed out after ${FETCH_TIMEOUT_MS}ms — aborting`)
-        controller.abort()
-      }, FETCH_TIMEOUT_MS)
-
       let query = supabase
         .from('conversations')
         .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
         .order('last_message_at', { ascending: false })
         .limit(150)
-        .abortSignal(controller.signal)
 
       if (selectedBotId) {
         query = query.eq('bot_id', selectedBotId)
       }
 
-      try {
-        const { data, error } = await query
-        clearTimeout(timeoutId)
+      const fetchPromise = query.then(({ data, error }) => {
         const elapsed = Date.now() - startTime
         console.log(`[useConversations] Fetch complete in ${elapsed}ms`, { count: data?.length, error })
-
         if (error) throw error
         return data as ConversationWithCustomerAndLabels[]
-      } catch (err) {
-        clearTimeout(timeoutId)
-        if ((err as Error)?.name === 'AbortError') {
-          console.error(`[useConversations] Fetch timed out`)
-          throw new Error('SUPABASE_TIMEOUT')
-        }
-        console.error(`[useConversations] Fetch failed!`, err)
-        throw err
-      }
+      })
+
+      const timeoutPromise = new Promise<ConversationWithCustomerAndLabels[]>((_, reject) =>
+        setTimeout(() => {
+          console.warn(`[useConversations] Fetch timed out after ${FETCH_TIMEOUT_MS}ms`)
+          reject(new Error('SUPABASE_TIMEOUT'))
+        }, FETCH_TIMEOUT_MS)
+      )
+
+      return Promise.race([fetchPromise, timeoutPromise])
     },
     refetchOnWindowFocus: false,  // Realtime handles live updates — prevents refetch storm on tab focus
   })
