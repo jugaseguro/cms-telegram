@@ -5,6 +5,17 @@ import { ThemeProvider } from 'next-themes'
 import { useState } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { toast } from 'sonner'
+import { useSessionRecovery } from '@/hooks/use-session-recovery'
+
+function ProvidersInner({ children }: { children: React.ReactNode }) {
+  useSessionRecovery()
+  return (
+    <>
+      {children}
+      <Toaster />
+    </>
+  )
+}
 
 export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(
@@ -32,8 +43,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 30_000,
             refetchOnWindowFocus: false,  // Realtime WebSockets handle live updates; refetching all queries on tab focus caused connection saturation and UI freezes
-            retry: 2,
-            retryDelay: (attemptIndex) => Math.min(1000 * 2 ** attemptIndex, 10000),
+            retry: 1,
+            retryDelay: 2000,
           },
         },
       })
@@ -42,8 +53,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
       <QueryClientProvider client={queryClient}>
-        {children}
-        <Toaster />
+        <ProvidersInner>{children}</ProvidersInner>
       </QueryClientProvider>
     </ThemeProvider>
   )
