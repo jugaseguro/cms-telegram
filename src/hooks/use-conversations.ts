@@ -14,36 +14,29 @@ export function useConversations() {
     queryKey: ['conversations', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
-      const fetchPromise = (async () => {
-        let query = supabase
-          .from('conversations')
-          .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
-          .order('last_message_at', { ascending: false })
-          .limit(150)
+      console.log(`[useConversations] Fetching conversations list...`)
+      const startTime = Date.now()
+      let query = supabase
+        .from('conversations')
+        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, last_activity, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, created_at), conversation_labels(label_id, labels(*))')
+        .order('last_message_at', { ascending: false })
+        .limit(150)
 
-        if (selectedBotId) {
-          query = query.eq('bot_id', selectedBotId)
-        }
+      if (selectedBotId) {
+        query = query.eq('bot_id', selectedBotId)
+      }
 
+      try {
         const { data, error } = await query
+        const elapsed = Date.now() - startTime
+        console.log(`[useConversations] Fetch complete in ${elapsed}ms`, { count: data?.length, error })
 
         if (error) throw error
         return data as ConversationWithCustomerAndLabels[]
-      })()
-
-      return Promise.race([
-        fetchPromise,
-        new Promise<ConversationWithCustomerAndLabels[]>((_, reject) =>
-          setTimeout(() => reject(new Error('SUPABASE_TIMEOUT')), 12000)
-        ),
-      ])
-    },
-    retry: (failureCount, error) => {
-      if (error instanceof Error && error.message === 'SUPABASE_TIMEOUT') {
-        if (typeof window !== 'undefined') window.location.reload()
-        return false
+      } catch (err) {
+        console.error(`[useConversations] Fetch failed!`, err)
+        throw err
       }
-      return failureCount < 3
     },
   })
 }

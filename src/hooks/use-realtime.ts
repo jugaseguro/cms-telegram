@@ -54,7 +54,8 @@ export function useRealtimeMessages(conversationId: string | null) {
           )
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        console.log(`[useRealtimeMessages:${conversationId}] Channel status: ${status}`, err)
         if (status === 'SUBSCRIBED') {
           if (isFirstSubscription.current) {
             isFirstSubscription.current = false
@@ -116,7 +117,9 @@ export function useRealtimeConversations(enabled = true) {
 
       // If the channel is not in SUBSCRIBED state, force a resubscribe
       const state = channel.state
+      console.log(`[useRealtime] Tab visible! Checking channel state:`, state)
       if (state !== 'joined') {
+        console.warn(`[useRealtime] Channel dead (${state}). Forcing reconnect...`)
         lastReconnectAttempt.current = now
         // Refresh auth token before reconnecting so the new subscription
         // uses a valid JWT
@@ -181,7 +184,8 @@ export function useRealtimeConversations(enabled = true) {
           }
         }
       )
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        console.log(`[useRealtimeConversations] Global channel status: ${status}`, err)
         if (status === 'SUBSCRIBED') {
           // Clear stuck-channel timer on successful subscription
           clearTimeout(stuckTimer.current)
