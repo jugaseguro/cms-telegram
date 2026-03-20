@@ -66,9 +66,10 @@ export function useSessionRecovery() {
             console.log('[SessionRecovery] Session refreshed successfully.')
           }
 
-          // 3. Invalidate only conversations so the sidebar refreshes
-          // Don't invalidate messages — they are updated by Realtime WebSockets
+          // 3. Invalidate conversations and active messages — realtime channels
+          // may have missed events during sleep, so we need a full refresh
           await queryClient.invalidateQueries({ queryKey: ['conversations'] })
+          await queryClient.invalidateQueries({ queryKey: ['messages'] })
           console.log('[SessionRecovery] Recovery complete.')
         } catch (err) {
           console.error('[SessionRecovery] Error during recovery:', err)
