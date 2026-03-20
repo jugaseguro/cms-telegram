@@ -5,8 +5,14 @@ import type { Database } from './types'
 // the Navigator Lock API's 5-second timeout and AbortError issues.
 // Safe with our singleton client — avoids the lock contention that
 // causes the panel to freeze after idle.
-let lockPromise: Promise<any> = Promise.resolve()
+// Timeout for waiting to acquire the lock (previous operation finishes)
 const LOCK_TIMEOUT_MS = 10_000
+// Timeout for the auth operation itself (token refresh HTTP request)
+// When the network is broken after device sleep, the refresh request hangs forever
+// and blocks ALL subsequent Supabase operations. This forces unlock after 12s max.
+const FN_TIMEOUT_MS = 12_000
+let lockPromise: Promise<any> = Promise.resolve()
+
 
 async function inProcessLock<R>(
   _name: string,
@@ -27,7 +33,17 @@ async function inProcessLock<R>(
     // ignore errors from previous operation or timeout
   }
   try {
-    return await fn()
+    // Race fn() against a timeout so a hung auth token refresh (broken network
+    // after sleep/minimize) can't hold the lock indefinitely.
+    return await Promise.race([
+      fn(),
+      new Promise<R>((_, reject) =>
+        setTimeout(
+          () => reject(new Error('Auth operation timed out — network likely broken')),
+          FN_TIMEOUT_MS
+        )
+      ),
+    ])
   } finally {
     resolve!()
   }
