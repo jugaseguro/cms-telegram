@@ -18,7 +18,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createClient } from '@/lib/supabase/client'
+import { createClient, resetLockQueue } from '@/lib/supabase/client'
 
 const MIN_HIDDEN_MS = 8_000  // only recover if hidden for at least 8 seconds
 
@@ -48,29 +48,27 @@ export function useSessionRecovery() {
       if (recoveringRef.current) return
 
       recoveringRef.current = true
-      console.log('[SessionRecovery] Tab visible after sleep — aborting stuck fetches and refreshing session...')
+      console.log('[SessionRecovery] Tab visible after sleep — recovering...')
 
       ;(async () => {
         try {
           // 1. Abort ALL in-flight Supabase HTTP requests (kills the stuck fetch queue)
           globalController.abort()
           globalController = new AbortController()
-          console.log('[SessionRecovery] Aborted all in-flight requests. New controller ready.')
 
-          // 2. Proactively refresh the auth session on the existing client
+          // 2. Reset the auth lock queue to prevent chained timeouts
+          resetLockQueue()
+
+          // 3. Proactively refresh the auth session
           const supabase = createClient()
           const { error } = await supabase.auth.refreshSession()
           if (error) {
             console.warn('[SessionRecovery] Session refresh failed:', error.message)
-          } else {
-            console.log('[SessionRecovery] Session refreshed successfully.')
           }
 
-          // 3. Invalidate conversations and active messages — realtime channels
-          // may have missed events during sleep, so we need a full refresh
-          await queryClient.invalidateQueries({ queryKey: ['conversations'] })
-          await queryClient.invalidateQueries({ queryKey: ['messages'] })
-          console.log('[SessionRecovery] Recovery complete.')
+          // 4. Invalidate ALL queries — conversations, messages, everything
+          await queryClient.invalidateQueries()
+          console.log('[SessionRecovery] Recovery complete — all queries refreshed.')
         } catch (err) {
           console.error('[SessionRecovery] Error during recovery:', err)
         } finally {
