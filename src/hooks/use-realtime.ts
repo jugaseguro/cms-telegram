@@ -94,9 +94,7 @@ export function useRealtimeMessages(conversationId: string | null) {
           } else {
             // Reconnected — refresh messages if query is idle
             const queryState = queryClient.getQueryState(['messages', conversationId])
-            const isAlreadyFetching = queryState?.fetchStatus === 'fetching'
-            const isError = queryState?.status === 'error'
-            if (!isAlreadyFetching && !isError) {
+            if (queryState?.fetchStatus !== 'fetching') {
               queryClient.invalidateQueries({
                 queryKey: ['messages', conversationId],
               })
