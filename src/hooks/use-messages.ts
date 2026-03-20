@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { getGlobalSignal } from '@/hooks/use-session-recovery'
 import type { Message } from '@/lib/supabase/types'
 
 const supabase = createClient()
@@ -27,6 +28,7 @@ export function useMessages(conversationId: string | null) {
         .order('created_at', { ascending: false })
         .order('id', { ascending: false })
         .limit(PAGE_SIZE)
+        .abortSignal(getGlobalSignal())
       if (pageParam) {
         // Composite cursor: get messages older than cursor OR same timestamp with smaller id
         q = q.or(
