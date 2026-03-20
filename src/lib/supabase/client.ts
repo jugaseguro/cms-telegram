@@ -49,3 +49,13 @@ export function createClient() {
   }
   return client
 }
+
+/**
+ * Destroys the singleton Supabase client so the next call to createClient()
+ * creates a fresh instance. Used for session recovery after device sleep.
+ * Also resets the lock queue to prevent chained timeouts from a stuck previous session.
+ */
+export function resetClient() {
+  client = null
+  lockPromise = Promise.resolve()
+}
