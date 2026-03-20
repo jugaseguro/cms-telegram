@@ -6,7 +6,8 @@ import type { Database } from './types'
 // Safe with our singleton client — avoids the lock contention that
 // causes the panel to freeze after idle.
 let lockPromise: Promise<any> = Promise.resolve()
-const LOCK_TIMEOUT_MS = 10_000
+const LOCK_TIMEOUT_MS = 5_000   // Reduced: 5s max to acquire lock
+const FN_TIMEOUT_MS = 10_000    // 10s max for the fn() itself
 
 async function inProcessLock<R>(
   _name: string,
@@ -27,7 +28,14 @@ async function inProcessLock<R>(
     // ignore errors from previous operation or timeout
   }
   try {
-    return await fn()
+    // Wrap fn() with a timeout so a stuck auth operation
+    // (e.g., hung token refresh) doesn't block the lock queue forever
+    return await Promise.race([
+      fn(),
+      new Promise<R>((_, reject) =>
+        setTimeout(() => reject(new Error('Auth operation timeout')), FN_TIMEOUT_MS)
+      ),
+    ])
   } finally {
     resolve!()
   }
@@ -51,11 +59,18 @@ export function createClient() {
 }
 
 /**
+ * Resets the lock queue to prevent chained timeouts from a stuck auth operation.
+ * Called during session recovery after device sleep.
+ */
+export function resetLockQueue() {
+  lockPromise = Promise.resolve()
+}
+
+/**
  * Destroys the singleton Supabase client so the next call to createClient()
  * creates a fresh instance. Used for session recovery after device sleep.
- * Also resets the lock queue to prevent chained timeouts from a stuck previous session.
  */
 export function resetClient() {
   client = null
-  lockPromise = Promise.resolve()
+  resetLockQueue()
 }
