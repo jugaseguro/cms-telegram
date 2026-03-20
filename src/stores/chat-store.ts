@@ -3,9 +3,11 @@ import { create } from 'zustand'
 interface ChatState {
   activeConversationId: string | null
   searchQuery: string
+  tabFilter: 'bot' | 'agent'
   unreadConversationIds: Set<string>
   setActiveConversation: (id: string | null) => void
   setSearchQuery: (query: string) => void
+  setTabFilter: (tab: 'bot' | 'agent') => void
   markUnread: (conversationId: string) => void
   markRead: (conversationId: string) => void
 }
@@ -13,6 +15,7 @@ interface ChatState {
 export const useChatStore = create<ChatState>((set) => ({
   activeConversationId: null,
   searchQuery: '',
+  tabFilter: 'bot',
   unreadConversationIds: new Set(),
   setActiveConversation: (id) =>
     set((state) => {
@@ -21,6 +24,7 @@ export const useChatStore = create<ChatState>((set) => ({
       return { activeConversationId: id, unreadConversationIds: next }
     }),
   setSearchQuery: (query) => set({ searchQuery: query }),
+  setTabFilter: (tab) => set({ tabFilter: tab }),
   markUnread: (conversationId) =>
     set((state) => {
       const next = new Set(state.unreadConversationIds)
