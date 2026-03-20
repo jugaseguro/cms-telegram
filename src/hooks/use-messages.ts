@@ -12,7 +12,7 @@ const PAGE_SIZE = 50
 // refresh step. When the auth queue is stuck after device sleep, AbortSignal has no
 // effect. Promise.race creates a completely independent timer that resolves/rejects
 // regardless of what Supabase is doing internally.
-const FETCH_TIMEOUT_MS = 15_000
+const FETCH_TIMEOUT_MS = 30_000
 
 interface PageCursor {
   created_at: string
@@ -205,8 +205,13 @@ export function useSendMessage() {
         )
       }
     },
-    onSettled: (_, __, variables) => {
+    onSettled: (data, _err, variables) => {
+      // Always refresh conversations (updates last_message_at, status, etc.)
       queryClient.invalidateQueries({ queryKey: ['conversations'] })
+      // Always refresh messages for this conversation — if the WebSocket is closed
+      // when the message is sent, no INSERT event fires and the optimistic message
+      // stays huerfano. This guarantees the real message always appears.
+      queryClient.invalidateQueries({ queryKey: ['messages', variables.conversationId] })
     },
   })
 }

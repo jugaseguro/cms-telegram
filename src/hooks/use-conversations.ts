@@ -5,7 +5,7 @@ import { useBotStore } from '@/stores/bot-store'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
 const supabase = createClient()
-const FETCH_TIMEOUT_MS = 15_000
+const FETCH_TIMEOUT_MS = 30_000
 
 export function useConversations() {
   const isInitialized = useAuthStore((s) => s.isInitialized)

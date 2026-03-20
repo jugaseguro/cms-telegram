@@ -60,12 +60,9 @@ export function useRealtimeMessages(conversationId: string | null) {
           if (isFirstSubscription.current) {
             isFirstSubscription.current = false
           } else {
-            // Guard: don't invalidate if the query is already fetching or in error state.
-            // Error state → invalidating starts a 15s timeout → another error → endless cascade.
+            // Only skip if already fetching to avoid duplicate parallel requests
             const queryState = queryClient.getQueryState(['messages', conversationId])
-            const isAlreadyFetching = queryState?.fetchStatus === 'fetching'
-            const isError = queryState?.status === 'error'
-            if (!isAlreadyFetching && !isError) {
+            if (queryState?.fetchStatus !== 'fetching') {
               queryClient.invalidateQueries({
                 queryKey: ['messages', conversationId],
               })
