@@ -10,6 +10,9 @@ import { Header } from '@/components/layout/header'
 import { Skeleton } from '@/components/ui/skeleton'
 import { RealtimeStatusBanner } from '@/components/layout/realtime-status-banner'
 import { useRealtimeConversations } from '@/hooks/use-realtime'
+import { useSocket } from '@/hooks/use-socket'
+import { useSocketConversations } from '@/hooks/use-socket-conversations'
+import { useFeatureFlags } from '@/stores/feature-flags'
 import { useTabTitle } from '@/hooks/use-tab-title'
 import { toast } from 'sonner'
 
@@ -45,7 +48,15 @@ export default function DashboardLayout({
     }, 1500)
   }, [router])
 
-  useRealtimeConversations(isInitialized)
+  const chatV2 = useFeatureFlags((s) => s.chatV2)
+
+  // v2: Socket.IO connection + conversations listener
+  useSocket()
+  useSocketConversations()
+
+  // v1: Supabase Realtime (fallback when chatV2 is off)
+  useRealtimeConversations(!chatV2 && isInitialized)
+
   useTabTitle()
 
   useEffect(() => {

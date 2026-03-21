@@ -15,7 +15,7 @@ export function useConversations() {
     queryKey: ['conversations', selectedBotId],
     enabled: isInitialized,
     placeholderData: keepPreviousData,
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       console.log(`[useConversations] Fetching conversations list...`)
       const startTime = Date.now()
 
@@ -36,14 +36,26 @@ export function useConversations() {
         return data as ConversationWithCustomerAndLabels[]
       })
 
-      const timeoutPromise = new Promise<ConversationWithCustomerAndLabels[]>((_, reject) =>
-        setTimeout(() => {
+      // Timeout with proper cleanup — the timer is cleared when the fetch
+      // completes first, preventing phantom rejections that pile up and
+      // congest the auth lock on frequent invalidations.
+      let timeoutId: ReturnType<typeof setTimeout>
+      const timeoutPromise = new Promise<ConversationWithCustomerAndLabels[]>((_, reject) => {
+        timeoutId = setTimeout(() => {
           console.warn(`[useConversations] Fetch timed out after ${FETCH_TIMEOUT_MS}ms`)
           reject(new Error('SUPABASE_TIMEOUT'))
         }, FETCH_TIMEOUT_MS)
-      )
+      })
 
-      return Promise.race([fetchPromise, timeoutPromise])
+      // Also abort on React Query cancellation (e.g. component unmount, new query)
+      signal?.addEventListener('abort', () => clearTimeout(timeoutId))
+
+      try {
+        const result = await Promise.race([fetchPromise, timeoutPromise])
+        return result
+      } finally {
+        clearTimeout(timeoutId!)
+      }
     },
     refetchOnWindowFocus: false,  // Realtime handles live updates — prevents refetch storm on tab focus
   })

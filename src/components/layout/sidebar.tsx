@@ -22,8 +22,10 @@ import {
   Bot,
   Layers,
   Sparkles,
+  Zap,
 } from 'lucide-react'
 import { BotSelector } from './bot-selector'
+import { useFeatureFlags } from '@/stores/feature-flags'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -49,6 +51,7 @@ export function Sidebar() {
   const { profile, user } = useAuthStore()
   const unreadCount = useChatStore((s) => s.unreadConversationIds.size)
   const onlineAgents = useAgentPresence()
+  const { chatV2, setChatV2 } = useFeatureFlags()
 
   const otherOnlineAgents = useMemo(
     () => onlineAgents.filter((a) => a.agent_id !== user?.id),
@@ -171,6 +174,20 @@ export function Sidebar() {
             </div>
           </div>
         </div>
+
+        {/* Chat v2 toggle */}
+        <button
+          onClick={() => setChatV2(!chatV2)}
+          className={cn(
+            'flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all duration-200 cursor-pointer',
+            chatV2
+              ? 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500/15'
+              : 'text-muted-foreground hover:bg-muted/50'
+          )}
+        >
+          <Zap className="h-[18px] w-[18px]" />
+          Chat v2 {chatV2 ? 'ON' : 'OFF'}
+        </button>
 
         {/* Logout */}
         <button
