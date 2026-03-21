@@ -22,9 +22,10 @@ const STUCK_CHANNEL_TIMEOUT_MS = 15_000
 /**
  * Safely reconnect a realtime channel.
  * Non-critical — if this fails, polling will keep data flowing.
+ * NOTE: Does NOT call refreshSession() — SessionRecovery handles auth
+ * to prevent auth lock contention after sleep.
  */
 async function reconnectChannel(channel: RealtimeChannel): Promise<void> {
-  try { await supabase.auth.refreshSession() } catch { /* ok */ }
   try { await channel.unsubscribe() } catch { /* ok */ }
   try { channel.subscribe() } catch { /* ok */ }
 }
@@ -146,14 +147,13 @@ export function useRealtimeConversations(enabled = true) {
       }
 
       // Try to reconnect realtime channel if dead
+      // Don't call refreshSession() here — SessionRecovery handles auth
+      // to prevent auth lock contention after sleep.
       const channel = channelRef.current
       if (channel && channel.state !== 'joined') {
         lastReconnectAttempt.current = now
         await reconnectChannel(channel)
       }
-
-      // Refresh auth
-      try { await supabase.auth.refreshSession() } catch { /* ok */ }
     }
 
     document.addEventListener('visibilitychange', handleVisibilityChange)

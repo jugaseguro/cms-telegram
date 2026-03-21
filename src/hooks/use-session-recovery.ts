@@ -1,33 +1,25 @@
 /**
- * useSessionRecovery + getGlobalSignal
+ * useSessionRecovery
  *
- * Provides a global AbortController that can be used to abort all in-flight
- * Supabase HTTP requests when the device wakes from sleep.
+ * THE SINGLE authority for recovering from device sleep / long idle.
+ * All other visibility handlers should NOT call auth operations to prevent
+ * auth lock contention.
  *
- * Why: Supabase-JS's internal fetch queue gets stuck after OS sleep.
- * The module-level `supabase` singleton cannot be replaced at runtime
- * (all hooks already hold a reference to the old instance).
+ * After sleep, Supabase's internal HTTP connections die but the auth lock queue
+ * keeps growing as every handler tries getUser()/refreshSession() simultaneously.
+ * This caused 30-48s freezes (4 handlers × 12s lock timeout).
  *
- * Solution: pass an AbortSignal to each Supabase query. When the tab becomes
- * visible after being hidden for a while, we abort the current controller
- * (which kills all stuck in-flight requests) and create a new one.
- * React Query will then automatically retry each aborted query with the new signal.
+ * Fix: ONE handler that resets the client (clears dead HTTP + lock queue),
+ * retries auth once, and hard-redirects to /login if the session is truly dead.
  */
 
 'use client'
 
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { createClient, resetLockQueue } from '@/lib/supabase/client'
+import { createClient, resetClient } from '@/lib/supabase/client'
 
 const MIN_HIDDEN_MS = 8_000  // only recover if hidden for at least 8 seconds
-
-// Module-level controller so all queryFns can import and use it
-let globalController = new AbortController()
-
-export function getGlobalSignal() {
-  return globalController.signal
-}
 
 export function useSessionRecovery() {
   const queryClient = useQueryClient()
@@ -52,25 +44,36 @@ export function useSessionRecovery() {
 
       ;(async () => {
         try {
-          // 1. Abort ALL in-flight Supabase HTTP requests (kills the stuck fetch queue)
-          globalController.abort()
-          globalController = new AbortController()
+          // 1. Reset the Supabase client: clears the auth lock queue and
+          // forces a fresh HTTP connection pool on next createClient() call.
+          // Without this, the dead HTTP connections from sleep hang forever
+          // and each queued auth op waits its own 5s timeout.
+          resetClient()
 
-          // 2. Reset the auth lock queue to prevent chained timeouts
-          resetLockQueue()
-
-          // 3. Proactively refresh the auth session
+          // 2. Get a fresh client and try to refresh the session
           const supabase = createClient()
           const { error } = await supabase.auth.refreshSession()
+
           if (error) {
-            console.warn('[SessionRecovery] Session refresh failed:', error.message)
+            console.warn('[SessionRecovery] Refresh failed:', error.message)
+            // Session is dead (expired refresh token after long sleep).
+            // Hard redirect clears all React state + stale singletons.
+            console.log('[SessionRecovery] Redirecting to login...')
+            window.location.href = '/login'
+            return
           }
 
-          // 4. Invalidate ALL queries — conversations, messages, everything
+          console.log('[SessionRecovery] Session refreshed successfully.')
+
+          // 3. Invalidate ALL queries so the UI refreshes with valid JWT
           await queryClient.invalidateQueries()
           console.log('[SessionRecovery] Recovery complete — all queries refreshed.')
         } catch (err) {
           console.error('[SessionRecovery] Error during recovery:', err)
+          // Auth operation timed out — network is likely still broken
+          // or refresh token expired. Redirect to login for clean slate.
+          resetClient()
+          window.location.href = '/login'
         } finally {
           recoveringRef.current = false
         }
