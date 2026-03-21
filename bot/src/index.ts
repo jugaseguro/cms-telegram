@@ -3,6 +3,7 @@ import { BotManager } from './bot-manager'
 import { startRecontactCron } from './cron/recontact'
 import { startSegmentationCron } from './cron/segmentation'
 import { createServer, type IncomingMessage } from 'http'
+import { initSocketServer } from './socket-server'
 
 const PORT = parseInt(process.env.PORT || '3001')
 const WEBHOOK_URL = process.env.WEBHOOK_URL
@@ -26,10 +27,9 @@ async function start() {
     process.exit(1)
   }
 
-  if (MODE === 'webhook' && WEBHOOK_URL) {
-    await manager.setupWebhooks(WEBHOOK_URL)
-
-    const server = createServer(async (req, res) => {
+  // Always create HTTP server (needed for Socket.IO in both modes)
+  const server = createServer(async (req, res) => {
+    if (MODE === 'webhook' && WEBHOOK_URL) {
       // Route: /webhook/:botId
       const match = req.url?.match(/^\/webhook\/([a-f0-9-]+)$/i)
       if (match && req.method === 'POST') {
@@ -53,18 +53,28 @@ async function start() {
         } catch (err) {
           console.error('Failed to parse webhook body:', err)
         }
-      } else if (req.url === '/health') {
-        res.writeHead(200)
-        res.end('OK')
-      } else {
-        res.writeHead(404)
-        res.end()
+        return
       }
-    })
+    }
 
-    server.listen(PORT, () => {
-      console.log(`Bot webhook server running on port ${PORT}`)
-    })
+    if (req.url === '/health') {
+      res.writeHead(200)
+      res.end('OK')
+    } else {
+      res.writeHead(404)
+      res.end()
+    }
+  })
+
+  // Initialize Socket.IO on the shared HTTP server
+  initSocketServer(server)
+
+  server.listen(PORT, () => {
+    console.log(`Bot server running on port ${PORT} (mode: ${MODE})`)
+  })
+
+  if (MODE === 'webhook' && WEBHOOK_URL) {
+    await manager.setupWebhooks(WEBHOOK_URL)
   } else {
     // Polling mode (for development)
     console.log('Starting bots in polling mode...')

@@ -22,7 +22,7 @@ interface PageCursor {
 export function useMessages(conversationId: string | null) {
   const query = useInfiniteQuery({
     queryKey: ['messages', conversationId],
-    queryFn: async ({ pageParam }) => {
+    queryFn: async ({ pageParam, signal }) => {
       console.log(`[useMessages] Fetching page for conversation: ${conversationId}`, pageParam)
       if (!conversationId) return []
 
@@ -49,14 +49,22 @@ export function useMessages(conversationId: string | null) {
         return ((data as Message[]) ?? []).reverse()
       })
 
-      const timeoutPromise = new Promise<Message[]>((_, reject) =>
-        setTimeout(() => {
+      let timeoutId: ReturnType<typeof setTimeout>
+      const timeoutPromise = new Promise<Message[]>((_, reject) => {
+        timeoutId = setTimeout(() => {
           console.warn(`[useMessages] Fetch timed out after ${FETCH_TIMEOUT_MS}ms`)
           reject(new Error('SUPABASE_TIMEOUT'))
         }, FETCH_TIMEOUT_MS)
-      )
+      })
 
-      return Promise.race([fetchPromise, timeoutPromise])
+      signal?.addEventListener('abort', () => clearTimeout(timeoutId))
+
+      try {
+        const result = await Promise.race([fetchPromise, timeoutPromise])
+        return result
+      } finally {
+        clearTimeout(timeoutId!)
+      }
     },
     initialPageParam: null as PageCursor | null,
     getNextPageParam: (lastPage): PageCursor | undefined => {

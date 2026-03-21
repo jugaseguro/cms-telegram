@@ -4,6 +4,9 @@ import { useEffect, useRef, useCallback, useState, useMemo } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMessages } from '@/hooks/use-messages'
 import { useRealtimeMessages } from '@/hooks/use-realtime'
+import { useSocketMessages } from '@/hooks/use-socket-messages'
+import { useFeatureFlags } from '@/stores/feature-flags'
+import { TypingIndicator } from './typing-indicator'
 import { MessageBubble } from './message-bubble'
 import { MessageInput } from './message-input'
 import { Button } from '@/components/ui/button'
@@ -32,7 +35,9 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
     fetchNextPage,
     refetch,
   } = useMessages(conversation.id)
-  useRealtimeMessages(conversation.id)
+  const chatV2 = useFeatureFlags((s) => s.chatV2)
+  useSocketMessages(chatV2 ? conversation.id : null)
+  useRealtimeMessages(chatV2 ? null : conversation.id)
   const { data: conversationLabels } = useConversationLabels(conversation.id)
   const toggleAiPaused = useToggleAiPaused()
 
@@ -293,9 +298,12 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
         )}
       </div>
 
-      {/* Input - fixed at bottom */}
+      {/* Typing indicator + Input - fixed at bottom */}
       {conversation.status !== 'closed' && (
-        <MessageInput conversationId={conversation.id} />
+        <>
+          {chatV2 && <TypingIndicator conversationId={conversation.id} />}
+          <MessageInput conversationId={conversation.id} />
+        </>
       )}
     </div>
   )

@@ -10,6 +10,7 @@ import { useAuthStore } from '@/stores/auth-store'
 import { Send, Paperclip, Loader2, Lock, MessageSquare, X, AlertTriangle } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
+import { useEmitTyping } from '@/hooks/use-typing'
 import { QuickRepliesPopover } from './quick-replies-popover'
 import { SlashCommandMenu } from './slash-command-menu'
 import NextImage from 'next/image'
@@ -33,6 +34,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   const fileRef = useRef<HTMLInputElement>(null)
   const { user } = useAuthStore()
   const sendMessage = useSendMessage()
+  const { emitTyping, stopTyping } = useEmitTyping(conversationId, user?.user_metadata?.full_name || 'Agente')
 
   const trackRateLimit = useCallback((remaining: number | null) => {
     setRateLimitRemaining(remaining)
@@ -60,6 +62,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
 
   async function handleSend() {
     if (!user) return
+    stopTyping()
 
     if (pendingFile) {
       await uploadAndSend(pendingFile)
@@ -158,6 +161,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
 
   function handleTextChange(value: string) {
     setText(value)
+    if (value.length > 0) emitTyping()
     // Detect "/" at start of input
     if (value.startsWith('/')) {
       setShowSlashMenu(true)
