@@ -2,7 +2,8 @@
  * useSessionRecovery
  *
  * THE SINGLE authority for recovering from device sleep / long idle.
- * All other visibility handlers have been removed to prevent auth lock contention.
+ * All other visibility handlers should NOT call auth operations to prevent
+ * auth lock contention.
  *
  * After sleep, Supabase's internal HTTP connections die but the auth lock queue
  * keeps growing as every handler tries getUser()/refreshSession() simultaneously.
@@ -64,9 +65,9 @@ export function useSessionRecovery() {
 
           console.log('[SessionRecovery] Session refreshed successfully.')
 
-          // 3. Invalidate queries so the UI refreshes with valid JWT
-          await queryClient.invalidateQueries({ queryKey: ['conversations'] })
-          console.log('[SessionRecovery] Recovery complete.')
+          // 3. Invalidate ALL queries so the UI refreshes with valid JWT
+          await queryClient.invalidateQueries()
+          console.log('[SessionRecovery] Recovery complete — all queries refreshed.')
         } catch (err) {
           console.error('[SessionRecovery] Error during recovery:', err)
           // Auth operation timed out — network is likely still broken

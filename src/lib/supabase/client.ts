@@ -14,7 +14,6 @@ const LOCK_TIMEOUT_MS = 3_000
 const FN_TIMEOUT_MS = 5_000
 let lockPromise: Promise<any> = Promise.resolve()
 
-
 async function inProcessLock<R>(
   _name: string,
   _acquireTimeout: number,
@@ -68,11 +67,18 @@ export function createClient() {
 }
 
 /**
+ * Resets the lock queue to prevent chained timeouts from a stuck auth operation.
+ * Called during session recovery after device sleep.
+ */
+export function resetLockQueue() {
+  lockPromise = Promise.resolve()
+}
+
+/**
  * Destroys the singleton Supabase client so the next call to createClient()
  * creates a fresh instance. Used for session recovery after device sleep.
- * Also resets the lock queue to prevent chained timeouts from a stuck previous session.
  */
 export function resetClient() {
   client = null
-  lockPromise = Promise.resolve()
+  resetLockQueue()
 }
