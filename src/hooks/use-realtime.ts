@@ -125,9 +125,9 @@ export function useRealtimeConversations(enabled = true) {
       if (state !== 'joined') {
         console.warn(`[useRealtime] Channel dead (${state}). Forcing reconnect...`)
         lastReconnectAttempt.current = now
-        // Refresh auth token before reconnecting so the new subscription
-        // uses a valid JWT
-        try { await supabase.auth.getUser() } catch { /* proceed anyway */ }
+        // Don't call getUser() here — it competes for the auth lock with
+        // SessionRecovery and causes cascading timeouts after sleep.
+        // SessionRecovery handles auth refresh; we just resubscribe.
         channel.unsubscribe().then(() => {
           channel.subscribe()
         })
@@ -216,10 +216,9 @@ export function useRealtimeConversations(enabled = true) {
           // Safety: if stuck in reconnecting for too long, force a full
           // channel teardown and resubscribe to recover from dead connections.
           clearTimeout(stuckTimer.current)
-          stuckTimer.current = setTimeout(async () => {
+          stuckTimer.current = setTimeout(() => {
             const ch = channelRef.current
             if (ch && ch.state !== 'joined') {
-              try { await supabase.auth.getUser() } catch { /* proceed anyway */ }
               ch.unsubscribe().then(() => {
                 ch.subscribe()
               })

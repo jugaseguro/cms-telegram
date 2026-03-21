@@ -2,7 +2,6 @@
 
 import { useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { Sidebar } from '@/components/layout/sidebar'
@@ -27,7 +26,6 @@ export default function DashboardLayout({
 }) {
   const { setUser, setProfile, setInitialized, isInitialized } = useAuthStore()
   const router = useRouter()
-  const queryClient = useQueryClient()
   const signOutInProgress = useRef(false)
 
   const handleSessionExpired = useCallback(() => {
@@ -125,40 +123,10 @@ export default function DashboardLayout({
     }
   }, [setUser, setProfile, setInitialized, handleSessionExpired])
 
-  // Refresh data when the user returns to the tab after long idle.
-  // We first refresh the auth token (getUser triggers a server-side
-  // token validation), then invalidate queries so they refetch with
-  // a valid JWT. Without this, queries refetch with an expired token
-  // and silently fail.
-  useEffect(() => {
-    let lastActivity = Date.now()
-    const LONG_IDLE_MS = 2 * 60 * 1000
-
-    async function handleVisibilityChange() {
-      if (document.visibilityState !== 'visible') return
-
-      const now = Date.now()
-      const idleDuration = now - lastActivity
-      lastActivity = now
-
-      if (idleDuration > LONG_IDLE_MS) {
-        try {
-          const { data: { user }, error } = await supabase.auth.getUser()
-          if (error || !user) {
-            handleSessionExpired()
-            return
-          }
-        } catch {
-          handleSessionExpired()
-          return
-        }
-        queryClient.invalidateQueries()
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [queryClient, handleSessionExpired])
+  // Visibility-based recovery is handled by useSessionRecovery (in providers.tsx).
+  // It resets the client, refreshes auth, and redirects to /login if dead.
+  // Having multiple visibility handlers caused auth lock contention (4 handlers
+  // each waiting 12s = 48s freeze).
 
   return (
     <div className="flex h-screen overflow-hidden">
