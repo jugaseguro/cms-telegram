@@ -151,16 +151,12 @@ function setupRealtimeRelay() {
         const msg = payload.new as Record<string, unknown>
         const conversationId = msg.conversation_id as string
 
-        // Emit to conversation room (agents viewing this chat)
-        io.to(`conversation:${conversationId}`).emit('message:new', {
+        console.log(`[socket.io] Relay: new message in ${conversationId} (sender: ${msg.sender_type}), emitting to ${io.sockets.sockets.size} clients`)
+
+        // Emit globally for unread badges, notification sounds, and message refresh
+        io.emit('message:new', {
           message: msg,
           conversationId,
-        })
-
-        // Also emit globally for conversation list updates / unread badges
-        io.emit('conversation:updated', {
-          conversationId,
-          event: 'new_message',
         })
       }
     )

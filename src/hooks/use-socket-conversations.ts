@@ -1,9 +1,9 @@
 import { useEffect, useRef, useCallback } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { usePathname } from 'next/navigation'
-import { getSocket } from '@/lib/socket'
 import { useChatStore } from '@/stores/chat-store'
 import { useFeatureFlags } from '@/stores/feature-flags'
+import { useRealtimeStore } from '@/stores/realtime-store'
 import { playNotificationSound } from '@/lib/notification-sound'
 
 /**
@@ -18,6 +18,7 @@ export function useSocketConversations() {
   pathnameRef.current = pathname
   const markUnread = useChatStore((s) => s.markUnread)
   const chatV2 = useFeatureFlags((s) => s.chatV2)
+  const socket = useRealtimeStore((s) => s.socket)
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
 
   const debouncedInvalidateConversations = useCallback(() => {
@@ -34,10 +35,7 @@ export function useSocketConversations() {
   }, [debouncedInvalidateConversations])
 
   useEffect(() => {
-    if (!chatV2) return
-
-    const socket = getSocket()
-    if (!socket) return
+    if (!chatV2 || !socket) return
 
     // Handle conversation updates (status, assignment, etc.)
     function handleConversationUpdated() {
@@ -87,5 +85,5 @@ export function useSocketConversations() {
       socket.off('message:new', handleMessageNew)
       socket.off('connect', handleConnect)
     }
-  }, [chatV2, queryClient, markUnread])
+  }, [chatV2, socket, queryClient, markUnread])
 }

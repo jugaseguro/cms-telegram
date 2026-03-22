@@ -16,6 +16,7 @@ export function useSocket() {
   const { isInitialized, user } = useAuthStore()
   const chatV2 = useFeatureFlags((s) => s.chatV2)
   const setStatus = useRealtimeStore((s) => s.setStatus)
+  const setSocket = useRealtimeStore((s) => s.setSocket)
   const connectedRef = useRef(false)
 
   useEffect(() => {
@@ -30,6 +31,7 @@ export function useSocket() {
 
         setStatus('connecting')
         const socket = connectSocket(session.access_token)
+        setSocket(socket)
 
         socket.on('connect', () => {
           if (!cancelled) {
@@ -70,9 +72,10 @@ export function useSocket() {
     return () => {
       cancelled = true
       disconnectSocket()
+      setSocket(null)
       connectedRef.current = false
     }
-  }, [chatV2, isInitialized, user, setStatus])
+  }, [chatV2, isInitialized, user, setStatus, setSocket])
 
   return getSocket()
 }
