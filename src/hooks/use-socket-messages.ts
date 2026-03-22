@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { getSocket } from '@/lib/socket'
 import { useFeatureFlags } from '@/stores/feature-flags'
+import { useRealtimeStore } from '@/stores/realtime-store'
 import type { Message } from '@/lib/supabase/types'
 
 /**
@@ -12,12 +12,10 @@ import type { Message } from '@/lib/supabase/types'
 export function useSocketMessages(conversationId: string | null) {
   const queryClient = useQueryClient()
   const chatV2 = useFeatureFlags((s) => s.chatV2)
+  const socket = useRealtimeStore((s) => s.socket)
 
   useEffect(() => {
-    if (!chatV2 || !conversationId) return
-
-    const socket = getSocket()
-    if (!socket) return
+    if (!chatV2 || !conversationId || !socket) return
 
     // Join conversation room
     socket.emit('join:conversation', { conversationId })
@@ -52,5 +50,5 @@ export function useSocketMessages(conversationId: string | null) {
       socket.off('message:new', handleMessageNew)
       socket.emit('leave:conversation', { conversationId })
     }
-  }, [chatV2, conversationId, queryClient])
+  }, [chatV2, conversationId, socket, queryClient])
 }
