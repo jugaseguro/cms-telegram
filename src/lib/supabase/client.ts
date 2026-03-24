@@ -10,8 +10,9 @@ import type { Database } from './types'
 const LOCK_TIMEOUT_MS = 3_000
 // Timeout for the auth operation itself (token refresh HTTP request)
 // When the network is broken after device sleep, the refresh request hangs forever
-// and blocks ALL subsequent Supabase operations. 5s is enough for any healthy refresh.
-const FN_TIMEOUT_MS = 5_000
+// and blocks ALL subsequent Supabase operations. 10s allows for slow networks
+// while still unblocking the UI if the request is truly stuck.
+const FN_TIMEOUT_MS = 10_000
 let lockPromise: Promise<any> = Promise.resolve()
 
 async function inProcessLock<R>(
@@ -32,19 +33,21 @@ async function inProcessLock<R>(
   } catch {
     // ignore errors from previous operation or timeout
   }
+  let timeoutId: ReturnType<typeof setTimeout>
   try {
     // Race fn() against a timeout so a hung auth token refresh (broken network
     // after sleep/minimize) can't hold the lock indefinitely.
     return await Promise.race([
       fn(),
-      new Promise<R>((_, reject) =>
-        setTimeout(
+      new Promise<R>((_, reject) => {
+        timeoutId = setTimeout(
           () => reject(new Error('Auth operation timed out — network likely broken')),
           FN_TIMEOUT_MS
         )
-      ),
+      }),
     ])
   } finally {
+    clearTimeout(timeoutId!)
     resolve!()
   }
 }
