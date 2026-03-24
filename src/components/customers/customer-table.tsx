@@ -24,8 +24,6 @@ import { CUSTOMER_STATUS_COLORS } from '@/lib/constants'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Customer, Transaction } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 type CustomerStats = {
   totalLoads: number
   confirmedLoads: number
@@ -60,6 +58,7 @@ export function CustomerTable() {
     queryKey: ['customers'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('customers')
         .select('id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, created_at')
@@ -74,6 +73,7 @@ export function CustomerTable() {
     queryKey: ['all-transactions-for-customers'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('transactions')
         .select('id, customer_id, amount, status, created_at')

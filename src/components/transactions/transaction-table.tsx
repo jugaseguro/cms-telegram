@@ -35,8 +35,6 @@ import {
 import { TRANSACTION_STATUS_COLORS } from '@/lib/constants'
 import type { Transaction, Customer, Profile } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 type TransactionWithRelations = Transaction & {
   customers: Customer
   profiles: Profile
@@ -54,6 +52,7 @@ export function TransactionTable() {
     queryKey: ['transactions', statusFilter],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       let query = supabase
         .from('transactions')
         .select('id, customer_id, agent_id, amount, status, receipt_url, notes, created_at, customers(first_name, last_name), profiles!transactions_agent_id_fkey(full_name)')
@@ -80,6 +79,7 @@ export function TransactionTable() {
       status: 'confirmed' | 'rejected'
       customerId: string
     }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('transactions')
         .update({ status })

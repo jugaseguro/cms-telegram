@@ -4,8 +4,6 @@ import type { AiUsageLogWithDetails } from '@/lib/supabase/types'
 import { useBotStore } from '@/stores/bot-store'
 import { useAuthStore } from '@/stores/auth-store'
 
-const supabase = createClient()
-
 export function useAiCosts() {
   const { selectedBotId } = useBotStore()
   const { isInitialized } = useAuthStore()
@@ -14,6 +12,7 @@ export function useAiCosts() {
     queryKey: ['ai-costs', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       let query = supabase
         .from('ai_usage_logs')
         .select(`
@@ -45,6 +44,7 @@ export function useAiCostsSummary() {
     queryKey: ['ai-costs-summary', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const args: any = {}
       if (selectedBotId) args.p_bot_id = selectedBotId
       const { data, error } = await (supabase.rpc as any)('get_ai_costs_summary', Object.keys(args).length > 0 ? args : undefined)

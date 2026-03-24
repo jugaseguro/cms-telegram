@@ -21,8 +21,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { QueryError } from '@/components/ui/query-error'
 import type { BotPublic } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function BotsContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editBot, setEditBot] = useState<BotPublic | null>(null)
@@ -33,6 +31,7 @@ export function BotsContent() {
     queryKey: ['admin-bots'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('bots')
         .select('id, name, telegram_username, is_active, color, welcome_message, created_at')

@@ -43,8 +43,6 @@ import { useLabels } from '@/hooks/use-labels'
 import { CUSTOMER_STATUS_COLORS, TRANSACTION_STATUS_COLORS } from '@/lib/constants'
 import type { Customer, Transaction } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 const schema = z.object({
   amount: z.string().min(1, 'Monto requerido'),
   notes: z.string().optional(),
@@ -69,6 +67,7 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
   const { data: transactions } = useQuery({
     queryKey: ['customer-transactions', customer.id],
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('transactions')
         .select('id, amount, status, notes, created_at')
@@ -90,6 +89,7 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const supabase = createClient()
       const { error } = await supabase.from('transactions').insert({
         customer_id: customer.id,
         agent_id: user!.id,

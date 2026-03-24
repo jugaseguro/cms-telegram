@@ -5,8 +5,6 @@ import { useBotStore } from '@/stores/bot-store'
 import { useEffect } from 'react'
 import type { BotPublic } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function useBots() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const setBots = useBotStore((s) => s.setBots)
@@ -15,6 +13,7 @@ export function useBots() {
     queryKey: ['bots'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('bots')
         .select('id, name, telegram_username, is_active, color, created_at')

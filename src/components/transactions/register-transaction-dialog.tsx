@@ -28,8 +28,6 @@ import { UploadReceipt } from './upload-receipt'
 import { toast } from 'sonner'
 import type { Customer } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 const schema = z.object({
   customer_id: z.string().min(1, 'Selecciona un cliente'),
   amount: z.string().min(1, 'Monto requerido'),
@@ -57,6 +55,7 @@ export function RegisterTransactionDialog({
     queryKey: ['customers'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('customers')
         .select('*')
@@ -78,6 +77,7 @@ export function RegisterTransactionDialog({
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const supabase = createClient()
       // Look up the customer's bot_id
       const customer = customers?.find((c) => c.id === data.customer_id)
       const { error } = await supabase.from('transactions').insert({

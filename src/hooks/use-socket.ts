@@ -5,8 +5,6 @@ import { useFeatureFlags } from '@/stores/feature-flags'
 import { connectSocket, disconnectSocket, getSocket } from '@/lib/socket'
 import { createClient } from '@/lib/supabase/client'
 
-const supabase = createClient()
-
 /**
  * Manages the Socket.IO connection lifecycle.
  * Connects when auth is ready and chatV2 is enabled.
@@ -26,6 +24,7 @@ export function useSocket() {
 
     async function connect() {
       try {
+        const supabase = createClient()
         const { data: { session } } = await supabase.auth.getSession()
         if (cancelled || !session?.access_token) return
 

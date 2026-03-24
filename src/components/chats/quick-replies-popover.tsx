@@ -14,8 +14,6 @@ import { ScrollArea } from '@/components/ui/scroll-area'
 import { Zap, Search } from 'lucide-react'
 import type { AutoResponse } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 interface QuickRepliesPopoverProps {
   onSelect: (text: string) => void
 }
@@ -27,6 +25,7 @@ export function QuickRepliesPopover({ onSelect }: QuickRepliesPopoverProps) {
   const { data: responses } = useQuery({
     queryKey: ['auto-responses-active'],
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('auto_responses')
         .select('id, trigger_text, response_text')

@@ -21,8 +21,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { QueryError } from '@/components/ui/query-error'
 import type { AutoResponse } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function AutoResponsesContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<AutoResponse | null>(null)
@@ -33,6 +31,7 @@ export function AutoResponsesContent() {
     queryKey: ['auto-responses'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('auto_responses')
         .select('*')
@@ -44,6 +43,7 @@ export function AutoResponsesContent() {
 
   const toggleActive = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('auto_responses')
         .update({ is_active })
@@ -57,6 +57,7 @@ export function AutoResponsesContent() {
 
   const deleteResponse = useMutation({
     mutationFn: async (id: string) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('auto_responses')
         .delete()

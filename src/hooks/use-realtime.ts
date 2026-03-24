@@ -9,8 +9,6 @@ import { toast } from 'sonner'
 import type { RealtimeChannel } from '@supabase/supabase-js'
 import type { Message } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 // ─── Polling intervals ───────────────────────────────────────────────
 // Polling is the RELIABLE fallback. Realtime is an optimization on top.
 const MESSAGES_POLL_MS = 4_000          // Poll active conversation messages every 4s
@@ -40,6 +38,8 @@ export function useRealtimeMessages(conversationId: string | null) {
   useEffect(() => {
     if (!conversationId) return
     isFirstSubscription.current = true
+
+    const supabase = createClient()
 
     // 1. POLLING — the reliable base. Checks for new messages every 4 seconds.
     //    This ensures data always flows even if realtime dies silently.
@@ -164,6 +164,8 @@ export function useRealtimeConversations(enabled = true) {
     if (!enabled) return
     isFirstSubscription.current = true
     realtimeHealthy.current = false
+
+    const supabase = createClient()
 
     // 1. POLLING — the reliable base.
     //    Polls faster when realtime is down, slower when it's healthy.

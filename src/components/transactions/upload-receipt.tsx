@@ -6,8 +6,6 @@ import { Button } from '@/components/ui/button'
 import { Upload, Loader2, Check } from 'lucide-react'
 import { toast } from 'sonner'
 
-const supabase = createClient()
-
 interface UploadReceiptProps {
   onUploaded: (url: string) => void
 }
@@ -18,6 +16,7 @@ export function UploadReceipt({ onUploaded }: UploadReceiptProps) {
   const [uploaded, setUploaded] = useState(false)
 
   async function handleUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const supabase = createClient()
     const file = e.target.files?.[0]
     if (!file) return
 

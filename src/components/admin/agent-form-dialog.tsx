@@ -32,8 +32,6 @@ interface AgentFormDialogProps {
   editAgent?: Profile | null
 }
 
-const supabase = createClient()
-
 export function AgentFormDialog({
   open,
   onOpenChange,
@@ -61,6 +59,7 @@ export function AgentFormDialog({
 
   const createMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const supabase = createClient()
       // Use Supabase Admin API via edge function or server action
       // For now, use signUp (in production, use admin API)
       const { error } = await supabase.auth.signUp({
@@ -86,6 +85,7 @@ export function AgentFormDialog({
 
   const updateMutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const supabase = createClient()
       if (!editAgent) return
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error } = await (supabase as any)

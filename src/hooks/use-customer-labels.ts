@@ -3,8 +3,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import type { Label, CustomerLabelWithDetails } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function useCustomerLabels(customerId: string) {
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
@@ -12,6 +10,7 @@ export function useCustomerLabels(customerId: string) {
     queryKey: ['customer-labels', customerId],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('customer_labels')
         .select('*, labels(*)')
@@ -35,6 +34,7 @@ export function useToggleCustomerLabel() {
       labelId: string
       isActive: boolean
     }) => {
+      const supabase = createClient()
       if (isActive) {
         const { error } = await supabase
           .from('customer_labels')

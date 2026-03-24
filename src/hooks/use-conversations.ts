@@ -4,7 +4,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { useBotStore } from '@/stores/bot-store'
 import type { ConversationWithCustomerAndLabels } from '@/lib/supabase/types'
 
-const supabase = createClient()
 const FETCH_TIMEOUT_MS = 30_000
 
 export function useConversations() {
@@ -16,6 +15,7 @@ export function useConversations() {
     enabled: isInitialized,
     placeholderData: keepPreviousData,
     queryFn: async ({ signal }) => {
+      const supabase = createClient()
       console.log(`[useConversations] Fetching conversations list...`)
       const startTime = Date.now()
 
@@ -72,6 +72,7 @@ export function useAssignConversation() {
       conversationId: string
       agentId: string
     }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('conversations')
         .update({ assigned_agent_id: agentId })
@@ -95,6 +96,7 @@ export function useToggleAiPaused() {
       conversationId: string
       aiPaused: boolean
     }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('conversations')
         .update({ ai_paused: aiPaused })
@@ -118,6 +120,7 @@ export function useUpdateConversationStatus() {
       conversationId: string
       status: 'open' | 'closed' | 'pending'
     }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('conversations')
         .update({ status })

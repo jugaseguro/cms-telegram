@@ -15,14 +15,13 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { LogOut, ChevronDown, Sun, Moon } from 'lucide-react'
 
-const supabase = createClient()
-
 export function Header() {
   const { profile } = useAuthStore()
   const router = useRouter()
   const { theme, setTheme } = useTheme()
 
   async function handleLogout() {
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()
