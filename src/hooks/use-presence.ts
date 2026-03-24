@@ -2,8 +2,6 @@ import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 
-const supabase = createClient()
-
 export interface OnlineAgent {
   agent_id: string
   full_name: string
@@ -17,6 +15,7 @@ export function useAgentPresence() {
   useEffect(() => {
     if (!user || !profile) return
 
+    const supabase = createClient()
     const channel = supabase.channel('agents-presence', {
       config: { presence: { key: user.id } },
     })

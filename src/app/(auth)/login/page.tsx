@@ -9,8 +9,6 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { MessageSquare } from 'lucide-react'
 
-const supabase = createClient()
-
 export default function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -23,6 +21,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
 
+    const supabase = createClient()
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password,

@@ -3,8 +3,6 @@ import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import type { SegmentationRule, SegmentationRuleWithLabel, SegmentationLog, SegmentationCondition } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function useSegmentationRules() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
@@ -12,6 +10,7 @@ export function useSegmentationRules() {
     queryKey: ['segmentation-rules'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('segmentation_rules')
         .select('*, labels(*)')
@@ -29,6 +28,7 @@ export function useSegmentationLogs() {
     queryKey: ['segmentation-logs'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('segmentation_logs')
         .select('*, customers(first_name, last_name, telegram_username), segmentation_rules(name), labels(name, color)')
@@ -56,6 +56,7 @@ export function useCreateSegmentationRule() {
       auto_remove: boolean
       bot_id: string | null
     }) => {
+      const supabase = createClient()
       const { error } = await supabase.from('segmentation_rules').insert(data)
       if (error) throw error
     },
@@ -78,6 +79,7 @@ export function useUpdateSegmentationRule() {
       auto_remove: boolean
       bot_id: string | null
     }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('segmentation_rules')
         .update(data)
@@ -95,6 +97,7 @@ export function useDeleteSegmentationRule() {
 
   return useMutation({
     mutationFn: async (id: string) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('segmentation_rules')
         .delete()
@@ -112,6 +115,7 @@ export function useToggleSegmentationRule() {
 
   return useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('segmentation_rules')
         .update({ is_active })

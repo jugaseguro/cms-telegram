@@ -2,8 +2,6 @@ import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-q
 import { createClient } from '@/lib/supabase/client'
 import type { Message } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 const MESSAGE_COLUMNS = 'id, conversation_id, sender_type, sender_id, content, message_type, media_url, telegram_message_id, is_internal, created_at'
 const PAGE_SIZE = 50
 
@@ -26,6 +24,7 @@ export function useMessages(conversationId: string | null) {
       console.log(`[useMessages] Fetching page for conversation: ${conversationId}`, pageParam)
       if (!conversationId) return []
 
+      const supabase = createClient()
       const startTime = Date.now()
       let q = supabase
         .from('messages')
@@ -75,7 +74,12 @@ export function useMessages(conversationId: string | null) {
     },
     select: (data) => ({
       ...data,
-      messages: data.pages.flat(),
+      // Reverse pages before flattening so oldest pages come first.
+      // Page[0] contains the most recent messages (fetched DESC, then reversed to ASC).
+      // Page[1] contains the next-older batch, etc.
+      // Without reversing, flat() puts recent messages at the top and older ones at the
+      // bottom — the opposite of what a chat expects (oldest top, newest bottom).
+      messages: [...data.pages].reverse().flat(),
     }),
     enabled: !!conversationId,
     staleTime: 30_000,
@@ -121,6 +125,7 @@ export function useSendMessage() {
       isInternal?: boolean
     }) => {
       // Insert message into DB
+      const supabase = createClient()
       const { data: message, error: msgError } = await supabase
         .from('messages')
         .insert({
@@ -229,6 +234,7 @@ export function useUpdateMessage() {
 
   return useMutation({
     mutationFn: async ({ messageId, content }: { messageId: string; content: string; conversationId: string }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('messages')
         .update({ content })
@@ -246,6 +252,7 @@ export function useDeleteMessage() {
 
   return useMutation({
     mutationFn: async ({ messageId }: { messageId: string; conversationId: string }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('messages')
         .delete()

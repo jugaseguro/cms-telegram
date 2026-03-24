@@ -20,8 +20,6 @@ interface MessageInputProps {
   conversationId: string
 }
 
-const supabase = createClient()
-
 export function MessageInput({ conversationId }: MessageInputProps) {
   const [text, setText] = useState('')
   const [isInternal, setIsInternal] = useState(false)
@@ -50,6 +48,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     queryKey: ['auto-responses-active'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('auto_responses')
         .select('id, trigger_text, response_text, shortcut, is_active')
@@ -97,6 +96,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   async function uploadAndSend(file: File) {
     if (!user) return
     setUploading(true)
+    const supabase = createClient()
 
     try {
       const ext = file.name.split('.').pop()

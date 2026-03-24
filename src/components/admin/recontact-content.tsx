@@ -39,8 +39,6 @@ import { useLabels } from '@/hooks/use-labels'
 import { useAuthStore } from '@/stores/auth-store'
 import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 const conditionLabels: Record<string, string> = {
   inactive_days: 'Inactivo (días)',
   no_payment: 'Sin pago',
@@ -67,6 +65,7 @@ export function RecontactContent() {
     queryKey: ['recontact-rules'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('recontact_rules')
         .select('*')
@@ -80,6 +79,7 @@ export function RecontactContent() {
     queryKey: ['recontact-logs'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('recontact_logs')
         .select('*, customers(first_name, last_name, telegram_username), recontact_rules(name)')
@@ -95,6 +95,7 @@ export function RecontactContent() {
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof form) => {
+      const supabase = createClient()
       const payload = {
         name: data.name,
         description: data.description || null,
@@ -128,6 +129,7 @@ export function RecontactContent() {
 
   const toggleActive = useMutation({
     mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('recontact_rules')
         .update({ is_active })
@@ -137,10 +139,12 @@ export function RecontactContent() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['recontact-rules'] })
     },
+    onError: (err) => toast.error('Error: ' + err.message),
   })
 
   const deleteRule = useMutation({
     mutationFn: async (id: string) => {
+      const supabase = createClient()
       const { error } = await supabase
         .from('recontact_rules')
         .delete()
@@ -151,6 +155,7 @@ export function RecontactContent() {
       toast.success('Regla eliminada')
       queryClient.invalidateQueries({ queryKey: ['recontact-rules'] })
     },
+    onError: (err) => toast.error('Error: ' + err.message),
   })
 
   function openCreate() {
@@ -381,7 +386,7 @@ export function RecontactContent() {
               <div className="space-y-2">
                 <Label>Etiqueta objetivo</Label>
                 <Select
-                  value={form.target_label_id}
+                  value={allLabels?.some(l => l.id === form.target_label_id) ? form.target_label_id : undefined}
                   onValueChange={(v) => { if (v) setForm((prev) => ({ ...prev, target_label_id: v })) }}
                 >
                   <SelectTrigger>

@@ -17,8 +17,6 @@ import { DollarSign, Hash, Clock, TrendingUp } from 'lucide-react'
 import { TRANSACTION_STATUS_COLORS } from '@/lib/constants'
 import type { Customer, Conversation, Transaction } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 interface CustomerDetailDialogProps {
   customer: Customer | null
   open: boolean
@@ -33,6 +31,7 @@ export function CustomerDetailDialog({
   const { data: conversations } = useQuery({
     queryKey: ['customer-conversations', customer?.id],
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('conversations')
         .select('*')
@@ -47,6 +46,7 @@ export function CustomerDetailDialog({
   const { data: transactions } = useQuery({
     queryKey: ['customer-all-transactions', customer?.id],
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('transactions')
         .select('*')

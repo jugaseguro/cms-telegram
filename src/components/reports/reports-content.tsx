@@ -33,8 +33,6 @@ const BotComparison = dynamic(
   }
 )
 
-const supabase = createClient()
-
 type Period = 'day' | 'month' | 'year'
 
 function getDateRange(period: Period) {
@@ -63,6 +61,7 @@ export function ReportsContent() {
     queryKey: ['reports-stats', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const args: any = {
         p_start: range.start,
         p_end: range.end,
@@ -98,6 +97,7 @@ export function ReportsContent() {
     queryKey: ['reports-chart', period, selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const truncText = period === 'day' ? 'hour' : period === 'month' ? 'day' : 'month'
       const args: any = {
         p_trunc_text: truncText,

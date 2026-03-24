@@ -20,8 +20,6 @@ import { useAuthStore } from '@/stores/auth-store'
 import { QueryError } from '@/components/ui/query-error'
 import type { Profile } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 export function AgentsContent() {
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editAgent, setEditAgent] = useState<Profile | null>(null)
@@ -31,6 +29,7 @@ export function AgentsContent() {
     queryKey: ['agents'],
     enabled: isInitialized,
     queryFn: async () => {
+      const supabase = createClient()
       const { data, error } = await supabase
         .from('profiles')
         .select('*')

@@ -17,8 +17,6 @@ import { Label } from '@/components/ui/label'
 import { toast } from 'sonner'
 import type { AutoResponse } from '@/lib/supabase/types'
 
-const supabase = createClient()
-
 interface AutoResponseDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -56,6 +54,7 @@ export function AutoResponseDialog({
 
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
+      const supabase = createClient()
       const payload = {
         trigger_text: data.trigger_text,
         response_text: data.response_text,

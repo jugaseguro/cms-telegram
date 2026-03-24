@@ -8,8 +8,6 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MessageSquare, Users, DollarSign, Clock } from 'lucide-react'
 import { DASHBOARD_CARDS_CONFIG } from '@/lib/constants'
 
-const supabase = createClient()
-
 interface Stats {
   totalConversations: number
   openConversations: number
@@ -25,6 +23,7 @@ export function DashboardContent() {
     queryKey: ['dashboard-stats', selectedBotId],
     enabled: isInitialized,
     queryFn: async (): Promise<Stats> => {
+      const supabase = createClient()
       let convQuery = supabase.from('conversations').select('id', { count: 'exact', head: true })
       let openQuery = supabase.from('conversations').select('id', { count: 'exact', head: true }).eq('status', 'open')
       let custQuery = supabase.from('customers').select('id', { count: 'exact', head: true })

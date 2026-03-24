@@ -7,8 +7,6 @@ import { useBotStore } from '@/stores/bot-store'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { MessageSquare, Users, DollarSign, TrendingUp } from 'lucide-react'
 
-const supabase = createClient()
-
 interface BotStats {
   botId: string
   botName: string
@@ -31,6 +29,7 @@ export function BotComparison({ dateRange }: BotComparisonProps) {
     queryKey: ['bot-comparison', dateRange.start, dateRange.end],
     enabled: isInitialized && bots.length > 1,
     queryFn: async (): Promise<BotStats[]> => {
+      const supabase = createClient()
       const results: BotStats[] = []
 
       for (const bot of bots) {

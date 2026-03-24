@@ -15,8 +15,6 @@ import { useFeatureFlags } from '@/stores/feature-flags'
 import { useTabTitle } from '@/hooks/use-tab-title'
 import { toast } from 'sonner'
 
-const supabase = createClient()
-
 const PROFILE_SELECT = 'id, email, full_name, role, avatar_url, created_at'
 
 export default function DashboardLayout({
@@ -38,6 +36,7 @@ export default function DashboardLayout({
 
     // Give the toast time to show before redirecting
     setTimeout(() => {
+      const supabase = createClient()
       supabase.auth.signOut().finally(() => {
         signOutInProgress.current = false
         router.push('/login')
@@ -58,6 +57,7 @@ export default function DashboardLayout({
   useTabTitle()
 
   useEffect(() => {
+    const supabase = createClient()
     async function loadUser() {
       try {
         const { data: { user }, error } = await supabase.auth.getUser()
