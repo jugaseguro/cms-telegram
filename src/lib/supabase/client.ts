@@ -33,22 +33,28 @@ async function inProcessLock<R>(
   } catch {
     // ignore errors from previous operation or timeout
   }
-  let timeoutId: ReturnType<typeof setTimeout>
+  let lockReleased = false
+  const releaseLock = () => {
+    if (!lockReleased) {
+      lockReleased = true
+      resolve!()
+    }
+  }
+  // Safety timer: if the auth operation hangs (broken network after sleep),
+  // release the lock so other Supabase operations aren't blocked.
+  // We DON'T reject — that causes unhandled rejections in Supabase's
+  // internal auth code and crashes the Next.js dev error overlay.
+  // The caller's own timeouts (FETCH_TIMEOUT_MS, TanStack Query retry)
+  // handle truly dead requests.
+  const safetyTimer = setTimeout(() => {
+    console.warn('[Supabase Lock] Auth operation slow — releasing lock after', FN_TIMEOUT_MS, 'ms')
+    releaseLock()
+  }, FN_TIMEOUT_MS)
   try {
-    // Race fn() against a timeout so a hung auth token refresh (broken network
-    // after sleep/minimize) can't hold the lock indefinitely.
-    return await Promise.race([
-      fn(),
-      new Promise<R>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error('Auth operation timed out — network likely broken')),
-          FN_TIMEOUT_MS
-        )
-      }),
-    ])
+    return await fn()
   } finally {
-    clearTimeout(timeoutId!)
-    resolve!()
+    clearTimeout(safetyTimer)
+    releaseLock()
   }
 }
 
