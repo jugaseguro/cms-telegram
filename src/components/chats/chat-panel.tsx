@@ -12,6 +12,7 @@ import { MessageInput } from './message-input'
 import { Button } from '@/components/ui/button'
 import { Loader2, User, CircleDollarSign, ArrowDown, BotOff, Bot } from 'lucide-react'
 import { LabelPicker } from './label-picker'
+import { QuickRepliesPopover } from './quick-replies-popover'
 import { WaitingBadge } from './waiting-badge'
 import { useConversationLabels } from '@/hooks/use-labels'
 import { useToggleAiPaused } from '@/hooks/use-conversations'
@@ -46,6 +47,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
   const isInitialLoad = useRef(true)
   const prevMessageCount = useRef(0)
   const [newMsgCount, setNewMsgCount] = useState(0)
+  const [quickReply, setQuickReply] = useState('')
 
   const useVirtual = messages.length > VIRTUALIZATION_THRESHOLD
 
@@ -174,6 +176,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0 ml-3">
+          <QuickRepliesPopover onSelect={setQuickReply} />
           <LabelPicker conversationId={conversation.id} />
           <Button
             variant={conversation.ai_paused ? 'destructive' : 'ghost'}
@@ -302,7 +305,7 @@ export function ChatPanel({ conversation, onToggleProfile }: ChatPanelProps) {
       {conversation.status !== 'closed' && (
         <>
           {chatV2 && <TypingIndicator conversationId={conversation.id} />}
-          <MessageInput conversationId={conversation.id} />
+          <MessageInput conversationId={conversation.id} quickReply={quickReply} onQuickReplyConsumed={() => setQuickReply('')} />
         </>
       )}
     </div>

@@ -165,6 +165,7 @@ create table public.recontact_rules (
   description text,
   condition_type text not null check (condition_type in ('inactive_days', 'no_payment', 'vip_inactive', 'by_label')),
   condition_days integer not null default 7,
+  condition_unit text not null default 'days' check (condition_unit in ('hours', 'days')),
   message_template text not null,
   is_active boolean not null default true,
   bot_id uuid references public.bots(id) on delete cascade,

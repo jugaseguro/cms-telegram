@@ -7,6 +7,7 @@ interface RecontactRule {
   name: string
   condition_type: 'inactive_days' | 'no_payment' | 'vip_inactive' | 'by_label'
   condition_days: number
+  condition_unit: 'hours' | 'days'
   message_template: string
   is_active: boolean
   bot_id: string | null
@@ -30,7 +31,12 @@ function renderTemplate(template: string, customer: Customer): string {
 
 async function getMatchingCustomers(rule: RecontactRule, botId: string): Promise<Customer[]> {
   const cutoffDate = new Date()
-  cutoffDate.setDate(cutoffDate.getDate() - rule.condition_days)
+  const unit = rule.condition_unit ?? 'days'
+  if (unit === 'hours') {
+    cutoffDate.setHours(cutoffDate.getHours() - rule.condition_days)
+  } else {
+    cutoffDate.setDate(cutoffDate.getDate() - rule.condition_days)
+  }
   const cutoff = cutoffDate.toISOString()
 
   let query = supabase
@@ -70,9 +76,13 @@ async function getMatchingCustomers(rule: RecontactRule, botId: string): Promise
   return (data ?? []) as Customer[]
 }
 
-async function hasRecentLog(ruleId: string, customerId: string, days: number): Promise<boolean> {
+async function hasRecentLog(ruleId: string, customerId: string, amount: number, unit: 'hours' | 'days'): Promise<boolean> {
   const cutoff = new Date()
-  cutoff.setDate(cutoff.getDate() - days)
+  if (unit === 'hours') {
+    cutoff.setHours(cutoff.getHours() - amount)
+  } else {
+    cutoff.setDate(cutoff.getDate() - amount)
+  }
 
   const { count, error } = await supabase
     .from('recontact_logs')
@@ -115,7 +125,7 @@ async function processRules(manager: BotManager) {
       console.log(`[recontact] Bot "${config.name}", Rule "${rule.name}": ${customers.length} matching customers`)
 
       for (const customer of customers) {
-        const alreadySent = await hasRecentLog(rule.id, customer.id, rule.condition_days)
+        const alreadySent = await hasRecentLog(rule.id, customer.id, rule.condition_days, rule.condition_unit ?? 'days')
         if (alreadySent) continue
 
         const message = renderTemplate(rule.message_template, customer)

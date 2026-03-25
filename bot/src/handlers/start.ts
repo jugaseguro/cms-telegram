@@ -35,20 +35,25 @@ export async function handleStart(ctx: BotContext) {
   })
 
   const welcomeText = ctx.welcomeMessage ||
-    '¡Bienvenido! 👋\n\n' +
-    'Estás conectado con nuestro equipo de atención.\n' +
-    'Escribe tu consulta y un agente te responderá a la brevedad.'
+    '🎉 ¡Bienvenido a 1xClub! 1xclub.bet\n\n' +
+    'Te contamos las promos disponibles para empezar a jugar:\n\n' +
+    '💰 Cargando $1.500\n' +
+    '* Jugás sin bonificación\n\n' +
+    '🚀 Cargando $3.000\n' +
+    '* Recibís 30% de bono extra\n\n' +
+    '📌 El bono es promocional y no es retirable.\n\n' +
+    'Para crearte el usuario envianos tu apodo (nickname) y te lo activamos enseguida para que puedas comenzar a jugar.\n\n' +
+    'Si querés cargar o tenés alguna duda, escribinos y te ayudamos al instante. 🍀'
 
-  await ctx.reply(welcomeText)
+  const sent = await ctx.reply(welcomeText)
 
-  // Send and pin a short help message
-  const menuText =
-    '📌 Para cualquier inconveniente o consulta, podés escribir *"quiero un agente"* y te conectamos con una persona real.'
-
-  const menuMsg = await ctx.reply(menuText, { parse_mode: 'Markdown' })
-  try {
-    await ctx.api.pinChatMessage(ctx.chat!.id, menuMsg.message_id, { disable_notification: true })
-  } catch (e) {
-    console.log('[start] Could not pin menu message:', e)
-  }
+  // Save the welcome message so it appears in the CMS
+  await insertMessageSafe({
+    conversation_id: conversation.id,
+    sender_type: 'bot',
+    sender_id: ctx.botId,
+    content: welcomeText,
+    message_type: 'text',
+    telegram_message_id: sent.message_id,
+  })
 }

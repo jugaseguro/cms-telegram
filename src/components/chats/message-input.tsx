@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
@@ -11,16 +11,17 @@ import { Send, Paperclip, Loader2, Lock, MessageSquare, X, AlertTriangle } from 
 import { createClient } from '@/lib/supabase/client'
 import { toast } from 'sonner'
 import { useEmitTyping } from '@/hooks/use-typing'
-import { QuickRepliesPopover } from './quick-replies-popover'
 import { SlashCommandMenu } from './slash-command-menu'
 import NextImage from 'next/image'
 import type { AutoResponse } from '@/lib/supabase/types'
 
 interface MessageInputProps {
   conversationId: string
+  quickReply?: string
+  onQuickReplyConsumed?: () => void
 }
 
-export function MessageInput({ conversationId }: MessageInputProps) {
+export function MessageInput({ conversationId, quickReply, onQuickReplyConsumed }: MessageInputProps) {
   const [text, setText] = useState('')
   const [isInternal, setIsInternal] = useState(false)
   const [pendingFile, setPendingFile] = useState<File | null>(null)
@@ -43,6 +44,13 @@ export function MessageInput({ conversationId }: MessageInputProps) {
   }, [])
 
   const isInitialized = useAuthStore((s) => s.isInitialized)
+
+  useEffect(() => {
+    if (quickReply) {
+      setText(quickReply)
+      onQuickReplyConsumed?.()
+    }
+  }, [quickReply, onQuickReplyConsumed])
 
   const { data: autoResponses } = useQuery({
     queryKey: ['auto-responses-active'],
@@ -303,7 +311,6 @@ export function MessageInput({ conversationId }: MessageInputProps) {
             >
               <Paperclip className="h-5 w-5" />
             </Button>
-            <QuickRepliesPopover onSelect={(reply) => setText(reply)} />
           </>
         )}
         <Textarea
