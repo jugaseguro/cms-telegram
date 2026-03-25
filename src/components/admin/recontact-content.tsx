@@ -37,6 +37,7 @@ import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
 import { useLabels } from '@/hooks/use-labels'
 import { useAuthStore } from '@/stores/auth-store'
+import { useBotStore } from '@/stores/bot-store'
 import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
 
 const conditionLabels: Record<string, string> = {
@@ -49,6 +50,7 @@ const conditionLabels: Record<string, string> = {
 export function RecontactContent() {
   const queryClient = useQueryClient()
   const isInitialized = useAuthStore((s) => s.isInitialized)
+  const selectedBotId = useBotStore((s) => s.selectedBotId)
   const { data: allLabels } = useLabels()
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<RecontactRule | null>(null)
@@ -63,16 +65,20 @@ export function RecontactContent() {
   })
 
   const { data: rules, isLoading, isError, refetch } = useQuery({
-    queryKey: ['recontact-rules'],
+    queryKey: ['recontact-rules', selectedBotId],
     enabled: isInitialized,
     queryFn: async () => {
       const supabase = createClient()
-      const { data, error } = await supabase
+      let query = supabase
         .from('recontact_rules')
-        .select('*')
+        .select('*, bots(id, name, color)')
         .order('created_at', { ascending: false })
+      if (selectedBotId) {
+        query = query.eq('bot_id', selectedBotId)
+      }
+      const { data, error } = await query
       if (error) throw error
-      return data as RecontactRule[]
+      return data as (RecontactRule & { bots: { id: string; name: string; color: string } | null })[]
     },
   })
 
@@ -107,11 +113,12 @@ export function RecontactContent() {
         target_label_id: data.condition_type === 'by_label' && data.target_label_id
           ? data.target_label_id
           : null as string | null,
+        bot_id: selectedBotId,
       }
       if (editing) {
         const { error } = await supabase
           .from('recontact_rules')
-          .update(payload)
+          .update({ ...payload, bot_id: editing.bot_id })
           .eq('id', editing.id)
         if (error) throw error
       } else {
@@ -203,6 +210,7 @@ export function RecontactContent() {
           <TableHeader>
             <TableRow>
               <TableHead>Nombre</TableHead>
+              <TableHead>Bot</TableHead>
               <TableHead>Condición</TableHead>
               <TableHead>Tiempo</TableHead>
               <TableHead>Activa</TableHead>
@@ -212,21 +220,21 @@ export function RecontactContent() {
           <TableBody>
             {isLoading && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center">
+                <TableCell colSpan={6} className="text-center">
                   Cargando...
                 </TableCell>
               </TableRow>
             )}
             {isError && (
               <TableRow>
-                <TableCell colSpan={5}>
+                <TableCell colSpan={6}>
                   <QueryError onRetry={refetch} />
                 </TableCell>
               </TableRow>
             )}
             {rules?.length === 0 && !isLoading && !isError && (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={6} className="text-center text-muted-foreground">
                   No hay reglas de recontacto configuradas
                 </TableCell>
               </TableRow>
@@ -242,6 +250,18 @@ export function RecontactContent() {
                       </p>
                     )}
                   </div>
+                </TableCell>
+                <TableCell>
+                  {rule.bots ? (
+                    <Badge
+                      variant="outline"
+                      style={{ borderColor: rule.bots.color, color: rule.bots.color }}
+                    >
+                      {rule.bots.name}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Global</Badge>
+                  )}
                 </TableCell>
                 <TableCell>
                   <Badge variant="outline">
