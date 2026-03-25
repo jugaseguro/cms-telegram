@@ -562,6 +562,7 @@ export type Database = {
           description: string | null
           condition_type: 'inactive_days' | 'no_payment' | 'vip_inactive' | 'by_label'
           condition_days: number
+          condition_unit: 'hours' | 'days'
           message_template: string
           is_active: boolean
           bot_id: string | null
@@ -574,6 +575,7 @@ export type Database = {
           description?: string | null
           condition_type: 'inactive_days' | 'no_payment' | 'vip_inactive' | 'by_label'
           condition_days?: number
+          condition_unit?: 'hours' | 'days'
           message_template: string
           is_active?: boolean
           bot_id?: string | null
@@ -586,6 +588,7 @@ export type Database = {
           description?: string | null
           condition_type?: 'inactive_days' | 'no_payment' | 'vip_inactive' | 'by_label'
           condition_days?: number
+          condition_unit?: 'hours' | 'days'
           message_template?: string
           is_active?: boolean
           bot_id?: string | null

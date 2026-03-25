@@ -10,7 +10,6 @@ import {
 } from '@/components/ui/popover'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { Zap, Search } from 'lucide-react'
 import type { AutoResponse } from '@/lib/supabase/types'
 
@@ -47,15 +46,15 @@ export function QuickRepliesPopover({ onSelect }: QuickRepliesPopoverProps) {
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         render={
-          <Button variant="ghost" size="icon" title="Respuestas rápidas">
-            <Zap className="h-5 w-5" />
+          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg" title="Respuestas rápidas">
+            <Zap className="h-4 w-4" />
           </Button>
         }
       />
       <PopoverContent
-        side="top"
-        align="start"
-        className="w-80 p-0"
+        side="bottom"
+        align="end"
+        className="w-72 max-w-[calc(100vw-2rem)] p-0 overflow-hidden"
       >
         <div className="border-b p-2">
           <div className="relative">
@@ -68,33 +67,31 @@ export function QuickRepliesPopover({ onSelect }: QuickRepliesPopoverProps) {
             />
           </div>
         </div>
-        <ScrollArea className="max-h-64">
-          <div className="p-1">
-            {filtered?.length === 0 && (
-              <p className="px-3 py-4 text-center text-sm text-muted-foreground">
-                No hay respuestas disponibles
-              </p>
-            )}
-            {filtered?.map((r) => (
-              <button
-                key={r.id}
-                className="flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent"
-                onClick={() => {
-                  onSelect(r.response_text)
-                  setOpen(false)
-                  setSearch('')
-                }}
-              >
-                <span className="text-xs font-medium text-primary">
-                  {r.trigger_text}
-                </span>
-                <span className="line-clamp-2 text-sm text-muted-foreground">
-                  {r.response_text}
-                </span>
-              </button>
-            ))}
-          </div>
-        </ScrollArea>
+        <div className="max-h-80 overflow-y-auto p-1">
+          {filtered?.length === 0 && (
+            <p className="px-3 py-4 text-center text-sm text-muted-foreground">
+              No hay respuestas disponibles
+            </p>
+          )}
+          {filtered?.map((r) => (
+            <button
+              key={r.id}
+              className="flex w-full flex-col gap-0.5 rounded-md px-3 py-2 text-left transition-colors hover:bg-accent"
+              onClick={() => {
+                onSelect(r.response_text)
+                setOpen(false)
+                setSearch('')
+              }}
+            >
+              <span className="text-xs font-medium text-primary">
+                {r.trigger_text}
+              </span>
+              <span className="line-clamp-2 text-sm text-muted-foreground break-words">
+                {r.response_text}
+              </span>
+            </button>
+          ))}
+        </div>
       </PopoverContent>
     </Popover>
   )

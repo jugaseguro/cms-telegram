@@ -57,6 +57,7 @@ export function RecontactContent() {
     description: '',
     condition_type: 'inactive_days' as RecontactRule['condition_type'],
     condition_days: 7,
+    condition_unit: 'days' as 'hours' | 'days',
     message_template: '',
     target_label_id: '' as string,
   })
@@ -101,6 +102,7 @@ export function RecontactContent() {
         description: data.description || null,
         condition_type: data.condition_type,
         condition_days: data.condition_days,
+        condition_unit: data.condition_unit,
         message_template: data.message_template,
         target_label_id: data.condition_type === 'by_label' && data.target_label_id
           ? data.target_label_id
@@ -165,6 +167,7 @@ export function RecontactContent() {
       description: '',
       condition_type: 'inactive_days',
       condition_days: 7,
+      condition_unit: 'days',
       message_template: '',
       target_label_id: '',
     })
@@ -178,6 +181,7 @@ export function RecontactContent() {
       description: rule.description ?? '',
       condition_type: rule.condition_type,
       condition_days: rule.condition_days,
+      condition_unit: rule.condition_unit ?? 'days',
       message_template: rule.message_template,
       target_label_id: rule.target_label_id ?? '',
     })
@@ -200,7 +204,7 @@ export function RecontactContent() {
             <TableRow>
               <TableHead>Nombre</TableHead>
               <TableHead>Condición</TableHead>
-              <TableHead>Días</TableHead>
+              <TableHead>Tiempo</TableHead>
               <TableHead>Activa</TableHead>
               <TableHead className="w-[100px]">Acciones</TableHead>
             </TableRow>
@@ -244,7 +248,7 @@ export function RecontactContent() {
                     {conditionLabels[rule.condition_type]}
                   </Badge>
                 </TableCell>
-                <TableCell>{rule.condition_days}</TableCell>
+                <TableCell>{rule.condition_days} {(rule.condition_unit ?? 'days') === 'hours' ? 'hs' : 'd'}</TableCell>
                 <TableCell>
                   <Switch
                     checked={rule.is_active}
@@ -359,7 +363,7 @@ export function RecontactContent() {
                     }}
                 >
                   <SelectTrigger>
-                    <SelectValue />
+                    <span>{conditionLabels[form.condition_type]}</span>
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="inactive_days">Inactivo (días)</SelectItem>
@@ -370,16 +374,33 @@ export function RecontactContent() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rule-days">Días</Label>
-                <Input
-                  id="rule-days"
-                  type="number"
-                  min={1}
-                  value={form.condition_days}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, condition_days: parseInt(e.target.value) || 1 }))
-                  }
-                />
+                <Label htmlFor="rule-days">Tiempo de inactividad</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="rule-days"
+                    type="number"
+                    min={1}
+                    value={form.condition_days}
+                    onChange={(e) =>
+                      setForm((f) => ({ ...f, condition_days: parseInt(e.target.value) || 1 }))
+                    }
+                    className="w-20"
+                  />
+                  <Select
+                    value={form.condition_unit}
+                    onValueChange={(v) => {
+                      if (v) setForm((f) => ({ ...f, condition_unit: v as 'hours' | 'days' }))
+                    }}
+                  >
+                    <SelectTrigger className="w-24">
+                      <span>{form.condition_unit === 'hours' ? 'Horas' : 'Días'}</span>
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="hours">Horas</SelectItem>
+                      <SelectItem value="days">Días</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </div>
             </div>
             {form.condition_type === 'by_label' && (
@@ -390,7 +411,20 @@ export function RecontactContent() {
                   onValueChange={(v) => { if (v) setForm((prev) => ({ ...prev, target_label_id: v })) }}
                 >
                   <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar etiqueta..." />
+                    {(() => {
+                      const selected = allLabels?.find(l => l.id === form.target_label_id)
+                      return selected ? (
+                        <span className="flex items-center gap-2">
+                          <span
+                            className="h-2.5 w-2.5 rounded-full inline-block flex-shrink-0"
+                            style={{ backgroundColor: selected.color }}
+                          />
+                          {selected.name}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground">Seleccionar etiqueta...</span>
+                      )
+                    })()}
                   </SelectTrigger>
                   <SelectContent>
                     {allLabels?.map((label) => (
@@ -407,7 +441,7 @@ export function RecontactContent() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Enviar a clientes con esta etiqueta que estén inactivos por los días configurados
+                  Enviar a clientes con esta etiqueta que estén inactivos por el tiempo configurado
                 </p>
               </div>
             )}
