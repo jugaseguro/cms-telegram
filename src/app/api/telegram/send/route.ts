@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
+import { withTimeout } from '@/lib/timeout'
 
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 500
+const TELEGRAM_REQUEST_TIMEOUT_MS = 12_000
 
 async function sendToTelegram(
   botToken: string,
@@ -28,11 +30,15 @@ async function sendToTelegram(
     body = { chat_id: chatId, text }
   }
 
-  response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  })
+  response = await withTimeout(
+    fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+    TELEGRAM_REQUEST_TIMEOUT_MS,
+    'TELEGRAM_API_TIMEOUT'
+  )
 
   const data = await response.json() as Record<string, unknown>
   return { ok: !!data.ok, data }

@@ -6,6 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { withTimeout } from '@/lib/timeout'
 import { useAuthStore } from '@/stores/auth-store'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
@@ -42,6 +43,8 @@ import { useCustomerLabels, useToggleCustomerLabel } from '@/hooks/use-customer-
 import { useLabels } from '@/hooks/use-labels'
 import { CUSTOMER_STATUS_COLORS, TRANSACTION_STATUS_COLORS } from '@/lib/constants'
 import type { Customer, Transaction } from '@/lib/supabase/types'
+
+const TRANSACTION_MUTATION_TIMEOUT_MS = 12_000
 
 const schema = z.object({
   amount: z.string().min(1, 'Monto requerido'),
@@ -90,15 +93,19 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
   const mutation = useMutation({
     mutationFn: async (data: FormData) => {
       const supabase = createClient()
-      const { error } = await supabase.from('transactions').insert({
-        customer_id: customer.id,
-        agent_id: user!.id,
-        amount: parseFloat(data.amount),
-        status: 'confirmed',
-        receipt_url: receiptUrl,
-        notes: data.notes || null,
-        bot_id: customer.bot_id,
-      })
+      const { error } = await withTimeout(
+        supabase.from('transactions').insert({
+          customer_id: customer.id,
+          agent_id: user!.id,
+          amount: parseFloat(data.amount),
+          status: 'confirmed',
+          receipt_url: receiptUrl,
+          notes: data.notes || null,
+          bot_id: customer.bot_id,
+        }),
+        TRANSACTION_MUTATION_TIMEOUT_MS,
+        'TRANSACTION_CREATE_TIMEOUT'
+      )
       if (error) throw error
     },
     onSuccess: () => {
@@ -111,7 +118,11 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
       setReceiptUrl(null)
       setShowForm(false)
     },
-    onError: (err) => toast.error('Error: ' + err.message),
+    onError: (err) => toast.error(
+      err.message === 'TRANSACTION_CREATE_TIMEOUT'
+        ? 'La carga tardó demasiado en guardarse.'
+        : 'Error: ' + err.message
+    ),
   })
 
   const name =
@@ -208,7 +219,9 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
                   return (
                     <button
                       key={label.id}
-                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted cursor-pointer"
+                      type="button"
+                      disabled={toggleLabel.isPending}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-xs hover:bg-muted cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
                       onClick={() =>
                         toggleLabel.mutate({
                           customerId: customer.id,

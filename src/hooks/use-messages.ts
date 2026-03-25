@@ -1,5 +1,6 @@
 import { useInfiniteQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
+import { withTimeout } from '@/lib/timeout'
 import type { Message } from '@/lib/supabase/types'
 
 const MESSAGE_COLUMNS = 'id, conversation_id, sender_type, sender_id, content, message_type, media_url, telegram_message_id, is_internal, created_at'
@@ -11,10 +12,34 @@ const PAGE_SIZE = 50
 // effect. Promise.race creates a completely independent timer that resolves/rejects
 // regardless of what Supabase is doing internally.
 const FETCH_TIMEOUT_MS = 30_000
+const MUTATION_TIMEOUT_MS = 15_000
+const TELEGRAM_SEND_TIMEOUT_MS = 20_000
 
 interface PageCursor {
   created_at: string
   id: string
+}
+
+type MessageMutationError = Error & { keepOptimistic?: boolean }
+
+interface ConversationSendTarget {
+  bot_id: string | null
+  customers: { telegram_id: number } | { telegram_id: number }[] | null
+}
+
+function getTelegramTarget(
+  conv: ConversationSendTarget | null
+): { chatId: number; botId: string | null } | null {
+  const customer = Array.isArray(conv?.customers)
+    ? conv.customers[0] ?? null
+    : conv?.customers ?? null
+
+  if (!customer?.telegram_id) return null
+
+  return {
+    chatId: customer.telegram_id,
+    botId: conv?.bot_id ?? null,
+  }
 }
 
 export function useMessages(conversationId: string | null) {
@@ -126,19 +151,23 @@ export function useSendMessage() {
     }) => {
       // Insert message into DB
       const supabase = createClient()
-      const { data: message, error: msgError } = await supabase
-        .from('messages')
-        .insert({
-          conversation_id: conversationId,
-          content,
-          sender_type: senderType,
-          sender_id: senderId,
-          message_type: messageType,
-          media_url: mediaUrl,
-          is_internal: isInternal,
-        })
-        .select()
-        .single()
+      const { data: message, error: msgError } = await withTimeout(
+        supabase
+          .from('messages')
+          .insert({
+            conversation_id: conversationId,
+            content,
+            sender_type: senderType,
+            sender_id: senderId,
+            message_type: messageType,
+            media_url: mediaUrl,
+            is_internal: isInternal,
+          })
+          .select()
+          .single(),
+        MUTATION_TIMEOUT_MS,
+        'MESSAGE_INSERT_TIMEOUT'
+      )
 
       if (msgError) throw msgError
 
@@ -146,33 +175,46 @@ export function useSendMessage() {
       if (isInternal) return message
 
       // Get customer telegram_id and bot_id to forward message
-      const { data: conv } = await supabase
-        .from('conversations')
-        .select('customer_id, bot_id, customers(telegram_id)')
-        .eq('id', conversationId)
-        .single()
+      const { data: conv, error: convError } = await withTimeout(
+        supabase
+          .from('conversations')
+          .select('customer_id, bot_id, customers(telegram_id)')
+          .eq('id', conversationId)
+          .single(),
+        MUTATION_TIMEOUT_MS,
+        'MESSAGE_CONVERSATION_TIMEOUT'
+      )
+      if (convError) throw convError
 
-      const customer = conv?.customers as { telegram_id: number } | null
-      if (customer) {
-        const res = await fetch('/api/telegram/send', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            chatId: customer.telegram_id,
-            text: content || undefined,
-            mediaUrl,
-            messageType,
-            botId: conv?.bot_id,
+      const telegramTarget = getTelegramTarget(conv as ConversationSendTarget | null)
+      if (telegramTarget) {
+        const res = await withTimeout(
+          fetch('/api/telegram/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              chatId: telegramTarget.chatId,
+              text: content || undefined,
+              mediaUrl,
+              messageType,
+              botId: telegramTarget.botId,
+            }),
           }),
-        })
+          TELEGRAM_SEND_TIMEOUT_MS,
+          'TELEGRAM_SEND_TIMEOUT'
+        )
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
           const errorMsg = (err as { error?: string }).error || 'Error desconocido'
           if (res.status === 429) {
-            throw new Error(`Rate limit: ${errorMsg}`)
+            const rateLimitError = new Error(`Rate limit: ${errorMsg}`) as MessageMutationError
+            rateLimitError.keepOptimistic = true
+            throw rateLimitError
           }
-          console.error('Telegram send failed:', err)
+          const deliveryError = new Error(errorMsg) as MessageMutationError
+          deliveryError.keepOptimistic = true
+          throw deliveryError
         }
       }
 
@@ -210,7 +252,11 @@ export function useSendMessage() {
 
       return { previousData }
     },
-    onError: (_err, variables, context) => {
+    onError: (err, variables, context) => {
+      if ((err as MessageMutationError).keepOptimistic) {
+        return
+      }
+
       if (context?.previousData) {
         queryClient.setQueryData(
           ['messages', variables.conversationId],
@@ -235,10 +281,14 @@ export function useUpdateMessage() {
   return useMutation({
     mutationFn: async ({ messageId, content }: { messageId: string; content: string; conversationId: string }) => {
       const supabase = createClient()
-      const { error } = await supabase
-        .from('messages')
-        .update({ content })
-        .eq('id', messageId)
+      const { error } = await withTimeout(
+        supabase
+          .from('messages')
+          .update({ content })
+          .eq('id', messageId),
+        MUTATION_TIMEOUT_MS,
+        'MESSAGE_UPDATE_TIMEOUT'
+      )
       if (error) throw error
     },
     onSuccess: (_, variables) => {
@@ -253,10 +303,14 @@ export function useDeleteMessage() {
   return useMutation({
     mutationFn: async ({ messageId }: { messageId: string; conversationId: string }) => {
       const supabase = createClient()
-      const { error } = await supabase
-        .from('messages')
-        .delete()
-        .eq('id', messageId)
+      const { error } = await withTimeout(
+        supabase
+          .from('messages')
+          .delete()
+          .eq('id', messageId),
+        MUTATION_TIMEOUT_MS,
+        'MESSAGE_DELETE_TIMEOUT'
+      )
       if (error) throw error
     },
     onSuccess: (_, variables) => {
