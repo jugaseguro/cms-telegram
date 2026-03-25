@@ -61,7 +61,7 @@ export function useSessionRecovery() {
         try {
           // 1. Reset the Supabase client: clears the auth lock queue and
           // forces a fresh HTTP connection pool on next createClient() call.
-          resetClient()
+          await resetClient()
 
           // 2. Get a fresh client and try to refresh the session
           const supabase = createClient()
@@ -89,10 +89,10 @@ export function useSessionRecovery() {
           console.log('[SessionRecovery] Recovery complete — all queries refreshed.')
         } catch (err) {
           const msg = (err as Error)?.message ?? ''
-          console.error('[SessionRecovery] Error during recovery:', msg)
+          console.warn('[SessionRecovery] Transient error during recovery:', msg)
 
           if (isSessionDead(msg)) {
-            resetClient()
+            await resetClient()
             window.location.href = '/login'
           }
           // Otherwise: timeout or network error — don't redirect.
