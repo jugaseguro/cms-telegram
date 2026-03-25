@@ -14,7 +14,6 @@ import type { Message } from '@/lib/supabase/types'
 const MESSAGES_POLL_MS = 4_000          // Poll active conversation messages every 4s
 const CONVERSATIONS_POLL_MS = 8_000     // Poll conversation list every 8s
 const CONVERSATIONS_IDLE_POLL_MS = 30_000 // When realtime is healthy, poll less often
-const RECONNECT_THROTTLE_MS = 10_000
 const STUCK_CHANNEL_TIMEOUT_MS = 15_000
 
 /**
@@ -111,7 +110,6 @@ export function useRealtimeConversations(enabled = true) {
   const isFirstSubscription = useRef(true)
   const debounceTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const channelRef = useRef<RealtimeChannel | null>(null)
-  const lastReconnectAttempt = useRef(0)
   const stuckTimer = useRef<ReturnType<typeof setTimeout>>(undefined)
   const pollRef = useRef<ReturnType<typeof setInterval>>(undefined)
   const realtimeHealthy = useRef(false)
@@ -129,37 +127,6 @@ export function useRealtimeConversations(enabled = true) {
     debouncedRef.current = invalidateConversations
   }, [invalidateConversations])
 
-  // Visibility-based recovery
-  useEffect(() => {
-    if (!enabled) return
-
-    async function handleVisibilityChange() {
-      if (document.visibilityState !== 'visible') return
-
-      const now = Date.now()
-      if (now - lastReconnectAttempt.current < RECONNECT_THROTTLE_MS) return
-
-      // Always refresh data when tab becomes visible
-      queryClient.invalidateQueries({ queryKey: ['conversations'] })
-      const activeId = useChatStore.getState().activeConversationId
-      if (activeId) {
-        queryClient.invalidateQueries({ queryKey: ['messages', activeId] })
-      }
-
-      // Try to reconnect realtime channel if dead
-      // Don't call refreshSession() here — SessionRecovery handles auth
-      // to prevent auth lock contention after sleep.
-      const channel = channelRef.current
-      if (channel && channel.state !== 'joined') {
-        lastReconnectAttempt.current = now
-        await reconnectChannel(channel)
-      }
-    }
-
-    document.addEventListener('visibilitychange', handleVisibilityChange)
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange)
-  }, [enabled, queryClient])
-
   useEffect(() => {
     if (!enabled) return
     isFirstSubscription.current = true
@@ -170,6 +137,8 @@ export function useRealtimeConversations(enabled = true) {
     // 1. POLLING — the reliable base.
     //    Polls faster when realtime is down, slower when it's healthy.
     pollRef.current = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+
       const interval = realtimeHealthy.current
         ? CONVERSATIONS_IDLE_POLL_MS
         : CONVERSATIONS_POLL_MS

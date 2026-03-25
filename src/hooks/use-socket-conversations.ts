@@ -61,13 +61,6 @@ export function useSocketConversations() {
 
       debouncedRef.current()
 
-      // Refresh messages if this is the active conversation
-      const activeId = useChatStore.getState().activeConversationId
-      if (msgConversationId === activeId) {
-        queryClient.invalidateQueries({
-          queryKey: ['messages', msgConversationId],
-        })
-      }
     }
 
     socket.on('conversation:updated', handleConversationUpdated)

@@ -37,8 +37,10 @@ export function LabelPicker({ conversationId }: LabelPickerProps) {
           return (
             <button
               key={label.id}
+              type="button"
+              disabled={toggleLabel.isPending}
               className={cn(
-                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent',
+                'flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60',
                 isActive && 'bg-accent/50'
               )}
               onClick={() =>

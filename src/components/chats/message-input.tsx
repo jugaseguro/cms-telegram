@@ -128,12 +128,19 @@ export function MessageInput({ conversationId }: MessageInputProps) {
           onSuccess: () => {
             setText('')
             clearPendingFile()
+            setUploading(false)
           },
-          onError: (err) => toast.error('Error al enviar: ' + err.message),
+          onError: (err) => {
+            setUploading(false)
+            toast.error('Error al enviar: ' + err.message)
+          },
         }
       )
+      return
     } finally {
-      setUploading(false)
+      if (!sendMessage.isPending) {
+        setUploading(false)
+      }
     }
   }
 
@@ -186,7 +193,7 @@ export function MessageInput({ conversationId }: MessageInputProps) {
     }
   }
 
-  const isSending = uploading
+  const isSending = uploading || sendMessage.isPending
 
   return (
     <div className="border-t bg-card/60 backdrop-blur-sm">
