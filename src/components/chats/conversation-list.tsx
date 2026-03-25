@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useCallback } from 'react'
+import { useMemo, useCallback, useRef, useLayoutEffect } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { useConversations } from '@/hooks/use-conversations'
 import { useChatStore } from '@/stores/chat-store'
@@ -28,6 +28,46 @@ export function ConversationList() {
     (e: React.ChangeEvent<HTMLInputElement>) => setSearchQuery(e.target.value),
     [setSearchQuery]
   )
+
+  // ─── Preserve scroll position across list updates ───────────────────
+  // When `conversations` updates (new messages, re-ordering), React re-renders
+  // the list. Without this, the ScrollArea viewport resets its scrollTop to 0
+  // or jumps, making the UI feel unstable.
+  //
+  // Strategy: capture scrollTop synchronously BEFORE the paint (useLayoutEffect
+  // runs after DOM mutations but before the browser paints), find the inner
+  // Radix ScrollArea viewport element, and restore the position so the user
+  // never sees a jump.
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const savedScrollTop = useRef<number>(0)
+
+  // Save scroll position before the list content changes
+  const conversationIds = conversations?.map((c) => c.id).join(',') ?? ''
+  const prevConversationIds = useRef(conversationIds)
+
+  useLayoutEffect(() => {
+    if (!scrollRef.current) return
+
+    // Find the Radix ScrollArea viewport (the actual scrollable element)
+    const viewport = scrollRef.current.querySelector<HTMLElement>(
+      '[data-radix-scroll-area-viewport]'
+    )
+    if (!viewport) return
+
+    if (prevConversationIds.current !== conversationIds) {
+      // List changed — restore the saved scroll position
+      viewport.scrollTop = savedScrollTop.current
+      prevConversationIds.current = conversationIds
+    }
+
+    // Always keep the saved position in sync with current scroll
+    const onScroll = () => {
+      savedScrollTop.current = viewport.scrollTop
+    }
+    viewport.addEventListener('scroll', onScroll, { passive: true })
+    return () => viewport.removeEventListener('scroll', onScroll)
+  }, [conversationIds])
+  // ─────────────────────────────────────────────────────────────────────
 
   const filtered = useMemo(() => conversations?.filter((c) => {
     // Tab filter
@@ -94,48 +134,50 @@ export function ConversationList() {
           </TabsList>
         </Tabs>
       </div>
-      <ScrollArea className="flex-1">
-        <div className="divide-y divide-border/40 p-2">
-          {isLoading && (
-            <div className="flex flex-col gap-3 p-4">
-              {Array.from({ length: 5 }).map((_, i) => (
-                <div key={i} className="flex items-center gap-3 animate-pulse">
-                  <div className="h-10 w-10 rounded-full bg-muted" />
-                  <div className="flex-1 space-y-2">
-                    <div className="h-3 w-24 rounded bg-muted" />
-                    <div className="h-2.5 w-16 rounded bg-muted" />
+      <div ref={scrollRef} className="flex-1 min-h-0 overflow-hidden">
+        <ScrollArea className="h-full [&_[data-radix-scroll-area-viewport]]:overscroll-contain">
+          <div className="divide-y divide-border/40 p-2">
+            {isLoading && (
+              <div className="flex flex-col gap-3 p-4">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="flex items-center gap-3 animate-pulse">
+                    <div className="h-10 w-10 rounded-full bg-muted" />
+                    <div className="flex-1 space-y-2">
+                      <div className="h-3 w-24 rounded bg-muted" />
+                      <div className="h-2.5 w-16 rounded bg-muted" />
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
-          {isError && (
-            <QueryError onRetry={refetch} />
-          )}
-          {filtered?.length === 0 && !isLoading && !isError && (
-            <div className="flex flex-col items-center gap-3 p-8 text-muted-foreground">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60">
-                <MessageSquareOff className="h-6 w-6" />
+                ))}
               </div>
-              <p className="text-sm font-medium">No hay conversaciones</p>
-            </div>
-          )}
-          {filtered?.map((conversation) => (
-            <div key={conversation.id} className="py-0.5" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' }}>
-              <ConversationItem
-                conversation={conversation}
-                isActive={conversation.id === activeConversationId}
-                onClick={() => {
-                  setActiveConversation(conversation.id)
-                  queryClient.invalidateQueries({
-                    queryKey: ['messages', conversation.id],
-                  })
-                }}
-              />
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
+            )}
+            {isError && (
+              <QueryError onRetry={refetch} />
+            )}
+            {filtered?.length === 0 && !isLoading && !isError && (
+              <div className="flex flex-col items-center gap-3 p-8 text-muted-foreground">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted/60">
+                  <MessageSquareOff className="h-6 w-6" />
+                </div>
+                <p className="text-sm font-medium">No hay conversaciones</p>
+              </div>
+            )}
+            {filtered?.map((conversation) => (
+              <div key={conversation.id} className="py-0.5" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' }}>
+                <ConversationItem
+                  conversation={conversation}
+                  isActive={conversation.id === activeConversationId}
+                  onClick={() => {
+                    setActiveConversation(conversation.id)
+                    queryClient.invalidateQueries({
+                      queryKey: ['messages', conversation.id],
+                    })
+                  }}
+                />
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
     </div>
   )
 }

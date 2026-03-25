@@ -32,7 +32,7 @@ export function ChatsContent() {
   )
 
   return (
-    <div className="-m-6 flex h-[calc(100vh-3.5rem)]">
+    <div className="-m-6 flex h-[calc(100vh-3.5rem)] overflow-hidden">
       {/* Conversation List */}
       <div className="w-80 flex-shrink-0">
         <ConversationList />
