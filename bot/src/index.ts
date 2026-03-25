@@ -3,7 +3,7 @@ import { BotManager } from './bot-manager'
 import { startRecontactCron } from './cron/recontact'
 import { startSegmentationCron } from './cron/segmentation'
 import { createServer, type IncomingMessage } from 'http'
-import { initSocketServer } from './socket-server'
+import { getSocketDiagnostics, initSocketServer } from './socket-server'
 
 const PORT = parseInt(process.env.PORT || '3001')
 const WEBHOOK_URL = process.env.WEBHOOK_URL
@@ -16,6 +16,15 @@ function readBody(req: IncomingMessage): Promise<string> {
     req.on('end', () => resolve(body))
     req.on('error', reject)
   })
+}
+
+function writeJson(
+  res: { writeHead: (status: number, headers?: Record<string, string>) => void; end: (body?: string) => void },
+  status: number,
+  payload: unknown
+) {
+  res.writeHead(status, { 'Content-Type': 'application/json' })
+  res.end(JSON.stringify(payload))
 }
 
 async function start() {
@@ -58,8 +67,34 @@ async function start() {
     }
 
     if (req.url === '/health') {
-      res.writeHead(200)
-      res.end('OK')
+      writeJson(res, 200, {
+        ok: true,
+        service: 'bot',
+        mode: MODE,
+        time: new Date().toISOString(),
+        checks: {
+          process: 'up',
+          webhookConfigured: MODE === 'webhook' ? Boolean(WEBHOOK_URL) : true,
+          socketServer: Boolean(getSocketDiagnostics().initialized),
+        },
+      })
+    } else if (req.url === '/diagnostics') {
+      writeJson(res, 200, {
+        ok: true,
+        service: 'bot',
+        mode: MODE,
+        port: PORT,
+        time: new Date().toISOString(),
+        checks: {
+          webhookConfigured: MODE === 'webhook' ? Boolean(WEBHOOK_URL) : true,
+          encryptionConfigured: Boolean(process.env.ENCRYPTION_KEY),
+          socketServer: Boolean(getSocketDiagnostics().initialized),
+        },
+        runtime: {
+          botCount: manager.getAllBots().size,
+          socket: getSocketDiagnostics(),
+        },
+      })
     } else {
       res.writeHead(404)
       res.end()

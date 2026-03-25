@@ -3,6 +3,9 @@ import { supabase } from './lib/supabase'
 import { createBot, type BotContext } from './bot'
 import type { BotConfig } from './lib/types'
 
+const DEFAULT_AI_MODEL = 'gpt-4o-mini'
+const DEFAULT_AI_MAX_HISTORY = 8
+
 export class BotManager {
   private bots = new Map<string, { bot: Bot<BotContext>; config: BotConfig }>()
   private mode: 'polling' | 'webhook' = 'polling'
@@ -35,8 +38,8 @@ export class BotManager {
         welcome_message: row.welcome_message,
         ai_enabled: row.ai_enabled ?? false,
         ai_system_prompt: row.ai_system_prompt ?? null,
-        ai_model: row.ai_model ?? 'gpt-4o-mini',
-        ai_max_history: row.ai_max_history ?? 8,
+        ai_model: row.ai_model ?? DEFAULT_AI_MODEL,
+        ai_max_history: row.ai_max_history ?? DEFAULT_AI_MAX_HISTORY,
         casino_operator: row.casino_operator ?? null,
       }
 
@@ -124,8 +127,8 @@ export class BotManager {
       welcome_message: row.welcome_message ?? null,
       ai_enabled: row.ai_enabled ?? false,
       ai_system_prompt: row.ai_system_prompt ?? null,
-      ai_model: row.ai_model ?? 'gpt-4o',
-      ai_max_history: row.ai_max_history ?? 15,
+      ai_model: row.ai_model ?? DEFAULT_AI_MODEL,
+      ai_max_history: row.ai_max_history ?? DEFAULT_AI_MAX_HISTORY,
       casino_operator: row.casino_operator ?? null,
     }
 
@@ -244,8 +247,8 @@ export class BotManager {
               entry.config.welcome_message = row.welcome_message ?? null
               entry.config.ai_enabled = row.ai_enabled ?? false
               entry.config.ai_system_prompt = row.ai_system_prompt ?? null
-              entry.config.ai_model = row.ai_model ?? 'gpt-4o'
-              entry.config.ai_max_history = row.ai_max_history ?? 15
+              entry.config.ai_model = row.ai_model ?? DEFAULT_AI_MODEL
+              entry.config.ai_max_history = row.ai_max_history ?? DEFAULT_AI_MAX_HISTORY
               entry.config.casino_operator = row.casino_operator ?? null
               // Update welcome message on the bot instance without restart
               ;(entry.bot as any).setWelcomeMessage?.(entry.config.welcome_message)

@@ -1,18 +1,37 @@
-import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { createServerSupabaseClient } from '@/lib/supabase/server'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { withTimeout } from '@/lib/timeout'
+import { apiError, apiSuccess, createApiMeta } from '@/lib/api-response'
 
 const MAX_RETRIES = 3
 const BASE_DELAY_MS = 500
 const TELEGRAM_REQUEST_TIMEOUT_MS = 12_000
+
+const sendTelegramSchema = z
+  .object({
+    chatId: z.coerce.number().int().positive('chatId must be a positive integer'),
+    text: z.string().trim().min(1).optional(),
+    mediaUrl: z.string().trim().min(1).optional(),
+    messageType: z.enum(['text', 'image', 'document']).optional(),
+    botId: z.string().uuid().optional(),
+  })
+  .superRefine((data, ctx) => {
+    const hasMedia = Boolean(data.mediaUrl && data.messageType && data.messageType !== 'text')
+    if (!data.text && !hasMedia) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Either text or media payload is required',
+        path: ['text'],
+      })
+    }
+  })
 
 async function sendToTelegram(
   botToken: string,
   payload: { chatId: number; text?: string; mediaUrl?: string; messageType?: string }
 ): Promise<{ ok: boolean; data: Record<string, unknown> }> {
   const { chatId, text, mediaUrl, messageType } = payload
-  let response: Response
   let endpoint: string
   let body: Record<string, unknown>
 
@@ -30,7 +49,7 @@ async function sendToTelegram(
     body = { chat_id: chatId, text }
   }
 
-  response = await withTimeout(
+  const response = await withTimeout(
     fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -40,7 +59,7 @@ async function sendToTelegram(
     'TELEGRAM_API_TIMEOUT'
   )
 
-  const data = await response.json() as Record<string, unknown>
+  const data = (await response.json()) as Record<string, unknown>
   return { ok: !!data.ok, data }
 }
 
@@ -53,7 +72,7 @@ async function sendWithRetry(
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     if (attempt > 0) {
       const delay = BASE_DELAY_MS * Math.pow(2, attempt - 1)
-      await new Promise((r) => setTimeout(r, delay))
+      await new Promise((resolve) => setTimeout(resolve, delay))
     }
 
     try {
@@ -63,13 +82,11 @@ async function sendWithRetry(
         return { ok: true, data: result.data, attempts: attempt + 1 }
       }
 
-      // Don't retry client errors (bad request, forbidden, etc.)
       const errorCode = (result.data as { error_code?: number }).error_code ?? 0
       if (errorCode >= 400 && errorCode < 500 && errorCode !== 429) {
         return { ok: false, data: result.data, attempts: attempt + 1 }
       }
 
-      // Retry on 429 (too many requests) or 5xx server errors
       lastError = result.data
     } catch (err) {
       lastError = { description: err instanceof Error ? err.message : 'Network error' }
@@ -80,40 +97,39 @@ async function sendWithRetry(
 }
 
 export async function POST(request: Request) {
-  const { chatId, text, mediaUrl, messageType, botId } = await request.json()
+  const meta = createApiMeta()
+  const body = await request.json().catch(() => null)
+  const parsed = sendTelegramSchema.safeParse(body)
 
-  if (!chatId) {
-    return NextResponse.json({ error: 'Missing chatId' }, { status: 400 })
+  if (!parsed.success) {
+    return apiError('VALIDATION_ERROR', 'Invalid telegram payload', {
+      status: 400,
+      details: parsed.error.flatten(),
+      meta,
+    })
   }
 
+  const { chatId, text, mediaUrl, messageType, botId } = parsed.data
   const supabase = await createServerSupabaseClient()
-
-  // Rate limit by agent (authenticated user)
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
   const agentId = user?.id ?? 'anonymous'
 
   const { success, remaining, reset } = await checkRateLimit(agentId)
   if (!success) {
-    return NextResponse.json(
-      { error: 'Has superado el límite de 30 mensajes por minuto. Esperá un momento.' },
-      {
-        status: 429,
-        headers: {
-          'X-RateLimit-Remaining': '0',
-          'X-RateLimit-Reset': String(reset),
-          'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
-        },
-      }
-    )
+    return apiError('RATE_LIMITED', 'Has superado el límite de 30 mensajes por minuto. Esperá un momento.', {
+      status: 429,
+      headers: {
+        'X-RateLimit-Remaining': '0',
+        'X-RateLimit-Reset': String(reset),
+        'Retry-After': String(Math.ceil((reset - Date.now()) / 1000)),
+      },
+      meta,
+    })
   }
 
-  if (!text && !(mediaUrl && (messageType === 'image' || messageType === 'document'))) {
-    return NextResponse.json({ error: 'Missing text' }, { status: 400 })
-  }
-
-  // Get bot token: from botId param, or fallback to env var for backwards compat
   let botToken: string | undefined
-
   if (botId) {
     const { data: bot } = await supabase
       .from('bots')
@@ -129,31 +145,30 @@ export async function POST(request: Request) {
   }
 
   if (!botToken) {
-    return NextResponse.json({ error: 'Bot token not configured' }, { status: 500 })
+    return apiError('INTERNAL_ERROR', 'Bot token not configured', { status: 500, meta })
   }
 
   const result = await sendWithRetry(botToken, { chatId, text, mediaUrl, messageType })
 
   if (!result.ok) {
-    return NextResponse.json(
-      {
-        error: (result.data as { description?: string }).description ?? 'Telegram delivery failed',
-        attempts: result.attempts,
-      },
-      {
-        status: 502,
-        headers: { 'X-RateLimit-Remaining': String(remaining) },
-      }
-    )
+    const message = (result.data as { description?: string }).description ?? 'Telegram delivery failed'
+    const code = message.includes('TIMEOUT') ? 'TIMEOUT' : 'DEPENDENCY_FAILURE'
+    return apiError(code, message, {
+      status: 502,
+      headers: { 'X-RateLimit-Remaining': String(remaining) },
+      details: { attempts: result.attempts },
+      meta,
+    })
   }
 
-  return NextResponse.json(
+  return apiSuccess(
     {
       success: true,
       message_id: (result.data.result as { message_id: number }).message_id,
       attempts: result.attempts,
     },
     {
+      meta,
       headers: { 'X-RateLimit-Remaining': String(remaining) },
     }
   )

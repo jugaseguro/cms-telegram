@@ -206,7 +206,7 @@ export function useSendMessage() {
 
         if (!res.ok) {
           const err = await res.json().catch(() => ({}))
-          const errorMsg = (err as { error?: string }).error || 'Error desconocido'
+          const errorMsg = (err as { error?: { message?: string } }).error?.message || 'Error desconocido'
           if (res.status === 429) {
             const rateLimitError = new Error(`Rate limit: ${errorMsg}`) as MessageMutationError
             rateLimitError.keepOptimistic = true

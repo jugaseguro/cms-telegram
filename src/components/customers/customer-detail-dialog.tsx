@@ -1,6 +1,4 @@
 'use client'
-
-import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import {
@@ -65,8 +63,7 @@ export function CustomerDetailDialog({
     customer.telegram_username ||
     `ID: ${customer.telegram_id}`
 
-  // Compute transaction stats
-  const { confirmed, pending, totalAmount, avgAmount, lastLoad, avgFrequency } = useMemo(() => {
+  const { confirmed, pending, totalAmount, avgAmount, lastLoad, avgFrequency } = (() => {
     const conf = transactions?.filter((t) => t.status === 'confirmed') ?? []
     const pend = transactions?.filter((t) => t.status === 'pending') ?? []
     const total = conf.reduce((sum, t) => sum + Number(t.amount), 0)
@@ -82,7 +79,7 @@ export function CustomerDetailDialog({
     }
 
     return { confirmed: conf, pending: pend, totalAmount: total, avgAmount: avg, lastLoad: last, avgFrequency: freq }
-  }, [transactions])
+  })()
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

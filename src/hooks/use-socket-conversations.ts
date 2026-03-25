@@ -15,7 +15,9 @@ export function useSocketConversations() {
   const queryClient = useQueryClient()
   const pathname = usePathname()
   const pathnameRef = useRef(pathname)
-  pathnameRef.current = pathname
+  useEffect(() => {
+    pathnameRef.current = pathname
+  }, [pathname])
   const markUnread = useChatStore((s) => s.markUnread)
   const chatV2 = useFeatureFlags((s) => s.chatV2)
   const socket = useRealtimeStore((s) => s.socket)
@@ -58,8 +60,6 @@ export function useSocketConversations() {
 
         playNotificationSound()
       }
-
-      debouncedRef.current()
 
     }
 
