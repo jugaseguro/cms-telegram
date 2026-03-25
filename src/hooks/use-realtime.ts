@@ -189,12 +189,6 @@ export function useRealtimeConversations(enabled = true) {
 
             playNotificationSound()
             debouncedRef.current()
-
-            if (msg.conversation_id === activeId) {
-              queryClient.invalidateQueries({
-                queryKey: ['messages', msg.conversation_id],
-              })
-            }
           }
         }
       )

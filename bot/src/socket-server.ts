@@ -35,6 +35,14 @@ export function getIO() {
   return io
 }
 
+export function getSocketDiagnostics() {
+  return {
+    initialized: Boolean(io),
+    connectedClients: io?.sockets.sockets.size ?? 0,
+    onlineAgents: Array.from(onlineAgents),
+  }
+}
+
 export function initSocketServer(httpServer: HTTPServer) {
   const corsOrigin = process.env.SOCKET_IO_CORS_ORIGIN || '*'
 

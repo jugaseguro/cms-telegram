@@ -1,0 +1,46 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - 'codex/**'
+  pull_request:
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    env:
+      NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: test-anon-key
+      TELEGRAM_BOT_TOKEN: test-token
+      NEXT_PUBLIC_SOCKET_URL: http://127.0.0.1:3001
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install web dependencies
+        run: npm ci
+
+      - name: Install bot dependencies
+        run: npm ci
+        working-directory: bot
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Check schema drift
+        run: npm run check:schema
+
+      - name: Typecheck web
+        run: npm run typecheck
+
+      - name: Typecheck bot
+        run: npm run typecheck:bot
+
+      - name: Run smoke tests
+        run: npm run test:smoke

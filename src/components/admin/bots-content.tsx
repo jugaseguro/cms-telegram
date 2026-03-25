@@ -48,7 +48,10 @@ export function BotsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id }),
       })
-      if (!res.ok) throw new Error('Error al eliminar')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error?.message || 'Error al eliminar')
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-bots'] })
@@ -67,7 +70,10 @@ export function BotsContent() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id, is_active }),
       })
-      if (!res.ok) throw new Error('Error al actualizar')
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        throw new Error(err.error?.message || 'Error al actualizar')
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-bots'] })

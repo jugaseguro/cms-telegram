@@ -27,6 +27,11 @@ export type Database = {
           is_active: boolean
           color: string
           welcome_message: string | null
+          ai_enabled: boolean
+          ai_system_prompt: string | null
+          ai_model: string
+          ai_max_history: number
+          casino_operator: string | null
           created_at: string
         }
         Insert: {
@@ -37,6 +42,11 @@ export type Database = {
           is_active?: boolean
           color?: string
           welcome_message?: string | null
+          ai_enabled?: boolean
+          ai_system_prompt?: string | null
+          ai_model?: string
+          ai_max_history?: number
+          casino_operator?: string | null
           created_at?: string
         }
         Update: {
@@ -47,6 +57,11 @@ export type Database = {
           is_active?: boolean
           color?: string
           welcome_message?: string | null
+          ai_enabled?: boolean
+          ai_system_prompt?: string | null
+          ai_model?: string
+          ai_max_history?: number
+          casino_operator?: string | null
         }
         Relationships: []
       }
@@ -86,7 +101,12 @@ export type Database = {
           phone: string | null
           status: 'new' | 'active' | 'inactive'
           has_paid: boolean
+          uuid_landing: string | null
           last_activity: string | null
+          casino_token: string | null
+          casino_user_id: string | null
+          casino_username: string | null
+          casino_profile: Record<string, unknown> | null
           bot_id: string
           created_at: string
         }
@@ -99,6 +119,12 @@ export type Database = {
           phone?: string | null
           status?: 'new' | 'active' | 'inactive'
           has_paid?: boolean
+          uuid_landing?: string | null
+          last_activity?: string | null
+          casino_token?: string | null
+          casino_user_id?: string | null
+          casino_username?: string | null
+          casino_profile?: Record<string, unknown> | null
           bot_id: string
           created_at?: string
         }
@@ -111,6 +137,12 @@ export type Database = {
           phone?: string | null
           status?: 'new' | 'active' | 'inactive'
           has_paid?: boolean
+          uuid_landing?: string | null
+          last_activity?: string | null
+          casino_token?: string | null
+          casino_user_id?: string | null
+          casino_username?: string | null
+          casino_profile?: Record<string, unknown> | null
           bot_id?: string
         }
         Relationships: [
@@ -135,6 +167,7 @@ export type Database = {
           bot_id: string
           created_at: string
           ai_paused: boolean
+          pending_action: Record<string, unknown> | null
         }
         Insert: {
           id?: string
@@ -147,6 +180,7 @@ export type Database = {
           bot_id: string
           created_at?: string
           ai_paused?: boolean
+          pending_action?: Record<string, unknown> | null
         }
         Update: {
           id?: string
@@ -158,6 +192,7 @@ export type Database = {
           first_response_at?: string | null
           bot_id?: string
           ai_paused?: boolean
+          pending_action?: Record<string, unknown> | null
         }
         Relationships: [
           {

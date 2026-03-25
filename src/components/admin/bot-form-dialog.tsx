@@ -97,7 +97,7 @@ export function BotFormDialog({
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.error || 'Error al crear bot')
+        throw new Error(err.error?.message || 'Error al crear bot')
       }
     },
     onSuccess: () => {
@@ -131,7 +131,7 @@ export function BotFormDialog({
       })
       if (!res.ok) {
         const err = await res.json()
-        throw new Error(err.error || 'Error al actualizar')
+        throw new Error(err.error?.message || 'Error al actualizar')
       }
     },
     onSuccess: () => {

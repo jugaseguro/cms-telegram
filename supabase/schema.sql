@@ -16,6 +16,12 @@ create table public.bots (
   token_encrypted text not null,
   is_active boolean not null default true,
   color text not null default '#3b82f6',
+  welcome_message text,
+  ai_enabled boolean not null default false,
+  ai_system_prompt text,
+  ai_model text not null default 'gpt-4o-mini',
+  ai_max_history integer not null default 8,
+  casino_operator text,
   created_at timestamptz not null default now()
 );
 
@@ -41,6 +47,10 @@ create table public.customers (
   has_paid boolean not null default false,
   uuid_landing text,
   last_activity timestamptz,
+  casino_token text,
+  casino_user_id text,
+  casino_username text,
+  casino_profile jsonb,
   bot_id uuid not null references public.bots(id) on delete cascade,
   created_at timestamptz not null default now(),
   unique(telegram_id, bot_id)
@@ -55,6 +65,8 @@ create table public.conversations (
   last_message_at timestamptz default now(),
   waiting_since timestamptz,
   first_response_at timestamptz,
+  ai_paused boolean not null default false,
+  pending_action jsonb,
   bot_id uuid not null references public.bots(id) on delete cascade,
   created_at timestamptz not null default now()
 );
@@ -169,6 +181,19 @@ create table public.recontact_logs (
   sent_at timestamptz not null default now()
 );
 
+-- AI usage logs
+create table public.ai_usage_logs (
+  id uuid primary key default uuid_generate_v4(),
+  conversation_id uuid references public.conversations(id) on delete set null,
+  bot_id uuid references public.bots(id) on delete set null,
+  model text not null,
+  prompt_tokens integer not null default 0,
+  completion_tokens integer not null default 0,
+  total_tokens integer not null default 0,
+  cost_usd numeric(12,6) not null default 0,
+  created_at timestamptz not null default now()
+);
+
 -- ============================================
 -- INDEXES
 -- ============================================
@@ -193,6 +218,8 @@ create index idx_segmentation_rules_active on public.segmentation_rules(is_activ
 create index idx_segmentation_logs_rule on public.segmentation_logs(rule_id);
 create index idx_segmentation_logs_customer on public.segmentation_logs(customer_id);
 create unique index idx_messages_unique_telegram_msg on public.messages(conversation_id, telegram_message_id) where telegram_message_id is not null;
+create index idx_ai_usage_logs_created_at on public.ai_usage_logs(created_at desc);
+create index idx_ai_usage_logs_bot_id on public.ai_usage_logs(bot_id);
 
 -- ============================================
 -- ROW LEVEL SECURITY
@@ -212,6 +239,7 @@ alter table public.customer_labels enable row level security;
 alter table public.segmentation_logs enable row level security;
 alter table public.recontact_rules enable row level security;
 alter table public.recontact_logs enable row level security;
+alter table public.ai_usage_logs enable row level security;
 
 -- Helper function: get user role (reads from JWT, falls back to DB query)
 create or replace function public.get_user_role()
@@ -420,6 +448,8 @@ create policy "Authenticated can view recontact_logs"
   on public.recontact_logs for select to authenticated using (true);
 create policy "Authenticated can insert recontact_logs"
   on public.recontact_logs for insert to authenticated with check (true);
+create policy "Authenticated can view ai_usage_logs"
+  on public.ai_usage_logs for select to authenticated using (true);
 
 -- ============================================
 -- REALTIME
