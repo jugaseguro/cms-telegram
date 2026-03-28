@@ -46,13 +46,13 @@ async function getMatchingCustomers(rule: RecontactRule, botId: string): Promise
 
   switch (rule.condition_type) {
     case 'inactive_days':
-      query = query.lt('last_activity', cutoff)
+      query = query.or(`last_activity.lt.${cutoff},last_activity.is.null`)
       break
     case 'no_payment':
-      query = query.eq('has_paid', false).lt('last_activity', cutoff)
+      query = query.eq('has_paid', false).or(`last_activity.lt.${cutoff},last_activity.is.null`)
       break
     case 'vip_inactive':
-      query = query.eq('has_paid', true).lt('last_activity', cutoff)
+      query = query.eq('has_paid', true).or(`last_activity.lt.${cutoff},last_activity.is.null`)
       break
     case 'by_label': {
       if (!rule.target_label_id) return []
@@ -63,7 +63,7 @@ async function getMatchingCustomers(rule: RecontactRule, botId: string): Promise
         .eq('label_id', rule.target_label_id)
       if (labelError || !labeledCustomers?.length) return []
       const customerIds = labeledCustomers.map((c) => c.customer_id)
-      query = query.in('id', customerIds).lt('last_activity', cutoff)
+      query = query.in('id', customerIds)
       break
     }
   }
@@ -113,8 +113,16 @@ async function processRules(manager: BotManager) {
     return
   }
 
+  console.log(`[recontact] ${rules.length} active rule(s): ${rules.map((r: any) => r.name).join(', ')}`)
+
+  const allBots = manager.getAllBots()
+  if (allBots.size === 0) {
+    console.warn('[recontact] No bots loaded in manager — skipping')
+    return
+  }
+
   // Process each bot
-  for (const [botId, { bot, config }] of manager.getAllBots()) {
+  for (const [botId, { bot, config }] of allBots) {
     // Get rules for this bot (bot-specific + global)
     const botRules = (rules as RecontactRule[]).filter(
       (r) => r.bot_id === null || r.bot_id === botId
@@ -122,11 +130,18 @@ async function processRules(manager: BotManager) {
 
     for (const rule of botRules) {
       const customers = await getMatchingCustomers(rule, botId)
-      console.log(`[recontact] Bot "${config.name}", Rule "${rule.name}": ${customers.length} matching customers`)
+      const unit = rule.condition_unit ?? 'days'
+      console.log(`[recontact] Bot "${config.name}", Rule "${rule.name}" (${rule.condition_type}, ${rule.condition_days}${unit}): ${customers.length} matching customers`)
+
+      let sentCount = 0
+      let skippedCount = 0
 
       for (const customer of customers) {
-        const alreadySent = await hasRecentLog(rule.id, customer.id, rule.condition_days, rule.condition_unit ?? 'days')
-        if (alreadySent) continue
+        const alreadySent = await hasRecentLog(rule.id, customer.id, rule.condition_days, unit)
+        if (alreadySent) {
+          skippedCount++
+          continue
+        }
 
         const message = renderTemplate(rule.message_template, customer)
 
@@ -139,10 +154,15 @@ async function processRules(manager: BotManager) {
             bot_id: botId,
           })
 
+          sentCount++
           console.log(`[recontact] Sent to ${customer.telegram_id} (bot: ${config.name}, rule: ${rule.name})`)
         } catch (err) {
           console.error(`[recontact] Failed to send to ${customer.telegram_id}:`, err)
         }
+      }
+
+      if (customers.length > 0) {
+        console.log(`[recontact] Rule "${rule.name}" summary: ${sentCount} sent, ${skippedCount} skipped (dedup)`)
       }
     }
   }
@@ -157,4 +177,10 @@ export function startRecontactCron(manager: BotManager) {
   })
 
   console.log('[recontact] Cron job scheduled (every hour)')
+
+  // Run once on startup after bots finish initializing
+  setTimeout(() => {
+    console.log('[recontact] Running initial check on startup...')
+    processRules(manager).catch(console.error)
+  }, 10_000)
 }
