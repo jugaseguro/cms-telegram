@@ -69,6 +69,7 @@ export function CustomerInfoPanel({ customer }: CustomerInfoPanelProps) {
 
   const { data: transactions } = useQuery({
     queryKey: ['customer-transactions', customer.id],
+    staleTime: 120_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase

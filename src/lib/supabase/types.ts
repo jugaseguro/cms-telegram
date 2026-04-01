@@ -720,6 +720,16 @@ export type Database = {
         Args: { p_rule_id: string }
         Returns: { customer_id: string }[]
       }
+      get_customer_stats: {
+        Args: Record<string, never>
+        Returns: {
+          customer_id: string
+          total_loads: number
+          confirmed_loads: number
+          total_amount: number
+          last_load_date: string | null
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -22,6 +22,7 @@ export function DashboardContent() {
   const { data: stats } = useQuery({
     queryKey: ['dashboard-stats', selectedBotId],
     enabled: isInitialized,
+    staleTime: 180_000,
     queryFn: async (): Promise<Stats> => {
       const supabase = createClient()
       let convQuery = supabase.from('conversations').select('id', { count: 'exact', head: true })

@@ -11,6 +11,8 @@ import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Search, MessageSquareOff, Bot, Headset } from 'lucide-react'
 import { QueryError } from '@/components/ui/query-error'
 
+const CONVERSATION_ITEM_STYLE = { contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' } as const
+
 export function ConversationList() {
   const {
     activeConversationId,
@@ -162,7 +164,7 @@ export function ConversationList() {
               </div>
             )}
             {filtered?.map((conversation) => (
-              <div key={conversation.id} className="py-0.5" style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 76px' }}>
+              <div key={conversation.id} className="py-0.5" style={CONVERSATION_ITEM_STYLE}>
                 <ConversationItem
                   conversation={conversation}
                   isActive={conversation.id === activeConversationId}

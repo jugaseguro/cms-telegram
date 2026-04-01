@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient, keepPreviousData } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth-store'
 import { QueryError } from '@/components/ui/query-error'
@@ -24,7 +24,7 @@ import {
 } from '@/components/ui/select'
 import { TableSkeleton } from '@/components/ui/page-skeleton'
 import { format } from 'date-fns'
-import { CheckCircle, XCircle, Image, Download, Eye } from 'lucide-react'
+import { CheckCircle, XCircle, Image, Download, Eye, ChevronLeft, ChevronRight } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Dialog,
@@ -40,8 +40,11 @@ type TransactionWithRelations = Transaction & {
   profiles: Profile
 }
 
+const PAGE_SIZE = 50
+
 export function TransactionTable() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'confirmed' | 'rejected'>('all')
+  const [page, setPage] = useState(0)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const { profile } = useAuthStore()
   const queryClient = useQueryClient()
@@ -49,15 +52,17 @@ export function TransactionTable() {
   const isInitialized = useAuthStore((s) => s.isInitialized)
 
   const { data: transactions, isLoading, isError, refetch } = useQuery({
-    queryKey: ['transactions', statusFilter],
+    queryKey: ['transactions', statusFilter, page],
     enabled: isInitialized,
+    staleTime: 120_000,
+    placeholderData: keepPreviousData,
     queryFn: async () => {
       const supabase = createClient()
       let query = supabase
         .from('transactions')
         .select('id, customer_id, agent_id, amount, status, receipt_url, notes, created_at, customers(first_name, last_name), profiles!transactions_agent_id_fkey(full_name)')
         .order('created_at', { ascending: false })
-        .limit(200)
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
       if (statusFilter !== 'all') {
         query = query.eq('status', statusFilter)
@@ -121,7 +126,7 @@ export function TransactionTable() {
       <div className="max-w-[200px]">
         <Select
           value={statusFilter}
-          onValueChange={(value) => setStatusFilter(value as 'all' | 'pending' | 'confirmed' | 'rejected')}
+          onValueChange={(value) => { setStatusFilter(value as 'all' | 'pending' | 'confirmed' | 'rejected'); setPage(0) }}
         >
           <SelectTrigger className="w-full">
             <SelectValue />
@@ -237,6 +242,34 @@ export function TransactionTable() {
           </TableBody>
         </Table>
       </div>
+      {/* Pagination controls */}
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">
+          Página {page + 1}
+          {transactions && transactions.length < PAGE_SIZE && ' (última)'}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => p - 1)}
+            disabled={page === 0}
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" />
+            Anterior
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage((p) => p + 1)}
+            disabled={!transactions || transactions.length < PAGE_SIZE}
+          >
+            Siguiente
+            <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
       {/* Receipt preview dialog */}
       <Dialog open={!!previewUrl} onOpenChange={() => setPreviewUrl(null)}>
         <DialogContent className="max-w-lg">
