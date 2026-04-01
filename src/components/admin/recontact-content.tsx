@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { createClient } from '@/lib/supabase/client'
 import { QueryError } from '@/components/ui/query-error'
@@ -38,6 +38,7 @@ import { es } from 'date-fns/locale'
 import { useLabels } from '@/hooks/use-labels'
 import { useAuthStore } from '@/stores/auth-store'
 import { useBotStore } from '@/stores/bot-store'
+import { getSocket } from '@/lib/socket'
 import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
 
 const conditionLabels: Record<string, string> = {
@@ -85,6 +86,7 @@ export function RecontactContent() {
   const { data: logs } = useQuery({
     queryKey: ['recontact-logs'],
     enabled: isInitialized,
+    refetchInterval: 60_000, // Auto-refresh every 60s
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -99,6 +101,25 @@ export function RecontactContent() {
       })[]
     },
   })
+
+  // Listen for real-time recontact notifications via socket.io
+  useEffect(() => {
+    const socket = getSocket()
+    if (!socket) return
+
+    function onRecontactSummary(payload: { ruleName: string; botName: string; sent: number; total: number }) {
+      toast.success(
+        `Recontacto "${payload.ruleName}" (${payload.botName}): ${payload.sent} mensaje${payload.sent !== 1 ? 's' : ''} enviado${payload.sent !== 1 ? 's' : ''}`,
+        { duration: 8000 }
+      )
+      queryClient.invalidateQueries({ queryKey: ['recontact-logs'] })
+    }
+
+    socket.on('recontact:summary', onRecontactSummary)
+    return () => {
+      socket.off('recontact:summary', onRecontactSummary)
+    }
+  }, [queryClient])
 
   const saveMutation = useMutation({
     mutationFn: async (data: typeof form) => {
@@ -394,7 +415,7 @@ export function RecontactContent() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="rule-days">Tiempo de inactividad</Label>
+                <Label htmlFor="rule-days">{form.condition_type === 'by_label' ? 'Intervalo entre envíos' : 'Tiempo de inactividad'}</Label>
                 <div className="flex gap-2">
                   <Input
                     id="rule-days"
@@ -461,7 +482,7 @@ export function RecontactContent() {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-muted-foreground">
-                  Enviar a clientes con esta etiqueta que estén inactivos por el tiempo configurado
+                  Enviar a todos los clientes con esta etiqueta. El tiempo configura el intervalo mínimo entre envíos
                 </p>
               </div>
             )}

@@ -9,6 +9,7 @@ export interface ServerToClientEvents {
   'typing:start': (payload: { conversationId: string; userId: string; userName: string }) => void
   'typing:stop': (payload: { conversationId: string; userId: string }) => void
   'presence:update': (payload: { onlineAgentIds: string[] }) => void
+  'recontact:summary': (payload: { ruleName: string; botName: string; sent: number; total: number }) => void
 }
 
 export interface ClientToServerEvents {
