@@ -13,6 +13,7 @@ export function useLabels() {
   return useQuery({
     queryKey: ['labels'],
     enabled: isInitialized,
+    staleTime: 300_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -28,6 +29,7 @@ export function useLabels() {
 export function useConversationLabels(conversationId: string) {
   return useQuery({
     queryKey: ['conversation-labels', conversationId],
+    staleTime: 120_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase

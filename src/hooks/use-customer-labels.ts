@@ -13,11 +13,12 @@ export function useCustomerLabels(customerId: string) {
   return useQuery({
     queryKey: ['customer-labels', customerId],
     enabled: isInitialized,
+    staleTime: 120_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('customer_labels')
-        .select('*, labels(*)')
+        .select('label_id, assigned_by, labels(id, name, color)')
         .eq('customer_id', customerId)
       if (error) throw error
       return data as CustomerLabelWithDetails[]
