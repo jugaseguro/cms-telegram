@@ -1,5 +1,6 @@
 import { Bot, Context } from 'grammy'
 import { handleStart } from './handlers/start'
+import { handleCallbackQuery } from './handlers/callbacks'
 import { handleTextMessage } from './handlers/message'
 import { handlePhoto } from './handlers/photo'
 import { handleDocument } from './handlers/document'
@@ -57,6 +58,9 @@ export function createBot(
 
   // Commands
   bot.command('start', handleStart)
+
+  // Inline button callbacks
+  bot.on('callback_query:data', handleCallbackQuery)
 
   // Separate handlers for each message type
   bot.on('message:photo', handlePhoto)

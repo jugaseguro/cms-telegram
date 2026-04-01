@@ -21,7 +21,7 @@ export function useConversations() {
 
       let query = supabase
         .from('conversations')
-        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, pending_action, customers(id, telegram_id, telegram_username, first_name, last_name, phone, status, has_paid, uuid_landing, last_activity, casino_token, casino_user_id, casino_username, casino_profile, bot_id, created_at), profiles(id, full_name), bots(id, name, color, telegram_username, is_active, welcome_message, ai_enabled, ai_system_prompt, ai_model, ai_max_history, casino_operator, created_at), conversation_labels(label_id, labels(*))')
+        .select('id, customer_id, assigned_agent_id, status, last_message_at, waiting_since, first_response_at, bot_id, created_at, ai_paused, pending_action, customers(id, telegram_id, telegram_username, first_name, last_name, has_paid, bot_id), profiles(id, full_name), bots(id, name, color), conversation_labels(label_id, labels(id, name, color))')
         .order('last_message_at', { ascending: false })
         .limit(150)
 
@@ -33,7 +33,7 @@ export function useConversations() {
         const elapsed = Date.now() - startTime
         console.log(`[useConversations] Fetch complete in ${elapsed}ms`, { count: data?.length, error })
         if (error) throw error
-        return data as ConversationWithCustomerAndLabels[]
+        return data as unknown as ConversationWithCustomerAndLabels[]
       })
 
       // Timeout with proper cleanup — the timer is cleared when the fetch

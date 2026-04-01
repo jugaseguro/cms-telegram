@@ -155,15 +155,20 @@ function setupRealtimeRelay() {
         table: 'messages',
       },
       (payload) => {
-        if (!io) return
+        if (!io || io.sockets.sockets.size === 0) return
         const msg = payload.new as Record<string, unknown>
         const conversationId = msg.conversation_id as string
 
-        console.log(`[socket.io] Relay: new message in ${conversationId} (sender: ${msg.sender_type}), emitting to ${io.sockets.sockets.size} clients`)
-
-        // Emit globally for unread badges, notification sounds, and message refresh
-        io.emit('message:new', {
+        // Send full message only to clients in the conversation room
+        io.to(`conversation:${conversationId}`).emit('message:new', {
           message: msg,
+          conversationId,
+        })
+
+        // Send lightweight notification globally for unread badges & sounds
+        // (only conversationId + senderType, not the full message payload)
+        io.emit('message:new', {
+          message: { conversation_id: conversationId, sender_type: msg.sender_type },
           conversationId,
         })
       }
@@ -183,7 +188,7 @@ function setupRealtimeRelay() {
         table: 'conversations',
       },
       (payload) => {
-        if (!io) return
+        if (!io || io.sockets.sockets.size === 0) return
         const conv = (payload.new || payload.old) as Record<string, unknown>
         const conversationId = conv.id as string
 

@@ -17,7 +17,7 @@ export function useLabels() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('labels')
-        .select('*')
+        .select('id, name, color')
         .order('name')
       if (error) throw error
       return data as Label[]
@@ -32,7 +32,7 @@ export function useConversationLabels(conversationId: string) {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('conversation_labels')
-        .select('label_id, labels(*)')
+        .select('label_id, labels(id, name, color)')
         .eq('conversation_id', conversationId)
       if (error) throw error
       return data as { label_id: string; labels: Label }[]

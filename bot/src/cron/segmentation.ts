@@ -17,7 +17,7 @@ async function processSegmentation(manager: BotManager) {
 
   const { data: rules, error } = await supabase
     .from('segmentation_rules')
-    .select('*')
+    .select('id, name, label_id, conditions, is_active, auto_remove, bot_id')
     .eq('is_active', true)
 
   if (error) {
@@ -53,31 +53,30 @@ async function processSegmentation(manager: BotManager) {
 
       const alreadyAssigned = new Set((existingLabels ?? []).map((l) => l.customer_id))
 
-      // Assign label only to NEW matching customers
-      for (const customerId of matchingIds) {
-        if (alreadyAssigned.has(customerId)) continue
+      // Assign label only to NEW matching customers (batched)
+      const newCustomerIds = [...matchingIds].filter((id) => !alreadyAssigned.has(id))
 
-        const { error: insertError } = await supabase
-          .from('customer_labels')
-          .upsert(
-            {
-              customer_id: customerId,
-              label_id: rule.label_id,
-              assigned_by: 'auto',
-              rule_id: rule.id,
-            },
-            { onConflict: 'customer_id,label_id', ignoreDuplicates: true }
-          )
-
-        if (insertError) continue
-
-        // Log assignment only for genuinely new assignments
-        await supabase.from('segmentation_logs').insert({
-          rule_id: rule.id,
+      if (newCustomerIds.length > 0) {
+        const upsertBatch = newCustomerIds.map((customerId) => ({
           customer_id: customerId,
           label_id: rule.label_id,
-          action: 'assigned',
-        })
+          assigned_by: 'auto',
+          rule_id: rule.id,
+        }))
+
+        const { error: upsertError } = await supabase
+          .from('customer_labels')
+          .upsert(upsertBatch, { onConflict: 'customer_id,label_id', ignoreDuplicates: true })
+
+        if (!upsertError) {
+          const logBatch = newCustomerIds.map((customerId) => ({
+            rule_id: rule.id,
+            customer_id: customerId,
+            label_id: rule.label_id,
+            action: 'assigned',
+          }))
+          await supabase.from('segmentation_logs').insert(logBatch)
+        }
       }
 
       // Auto-remove: remove label from customers who no longer match
@@ -94,25 +93,30 @@ async function processSegmentation(manager: BotManager) {
           continue
         }
 
-        for (const cl of currentLabels ?? []) {
-          if (!matchingIds.has(cl.customer_id)) {
-            await supabase
-              .from('customer_labels')
-              .delete()
-              .eq('customer_id', cl.customer_id)
-              .eq('label_id', rule.label_id)
-              .eq('assigned_by', 'auto')
-              .eq('rule_id', rule.id)
+        const toRemove = (currentLabels ?? []).filter((cl) => !matchingIds.has(cl.customer_id))
 
-            await supabase.from('segmentation_logs').insert({
-              rule_id: rule.id,
-              customer_id: cl.customer_id,
-              label_id: rule.label_id,
-              action: 'removed',
-            })
+        if (toRemove.length > 0) {
+          const removeIds = toRemove.map((cl) => cl.customer_id)
 
-            console.log(`[segmentation] Removed label from customer ${cl.customer_id} (rule: ${rule.name})`)
-          }
+          // Batch delete: remove labels for all non-matching customers
+          await supabase
+            .from('customer_labels')
+            .delete()
+            .in('customer_id', removeIds)
+            .eq('label_id', rule.label_id)
+            .eq('assigned_by', 'auto')
+            .eq('rule_id', rule.id)
+
+          // Batch log removals
+          const logBatch = removeIds.map((customerId) => ({
+            rule_id: rule.id,
+            customer_id: customerId,
+            label_id: rule.label_id,
+            action: 'removed',
+          }))
+          await supabase.from('segmentation_logs').insert(logBatch)
+
+          console.log(`[segmentation] Removed label from ${removeIds.length} customers (rule: ${rule.name})`)
         }
       }
     } catch (err) {

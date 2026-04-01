@@ -24,6 +24,9 @@ export function useSocketMessages(conversationId: string | null) {
     function handleMessageNew(payload: { message: Record<string, unknown>; conversationId: string }) {
       if (payload.conversationId !== conversationId) return
 
+      // Skip lightweight notification payloads (no id = global notification, not full message)
+      if (!payload.message.id) return
+
       const newMsg = payload.message as unknown as Message
 
       queryClient.setQueryData(

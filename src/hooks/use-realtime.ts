@@ -11,9 +11,10 @@ import type { Message } from '@/lib/supabase/types'
 
 // ─── Polling intervals ───────────────────────────────────────────────
 // Polling is the RELIABLE fallback. Realtime is an optimization on top.
-const MESSAGES_POLL_MS = 4_000          // Poll active conversation messages every 4s
-const CONVERSATIONS_POLL_MS = 8_000     // Poll conversation list every 8s
-const CONVERSATIONS_IDLE_POLL_MS = 30_000 // When realtime is healthy, poll less often
+// NOTE: Intervals were reduced from 4s/8s/30s to save Supabase egress (~5-6 GB/month savings)
+const MESSAGES_POLL_MS = 60_000          // Poll active conversation messages every 60s (realtime handles instant delivery)
+const CONVERSATIONS_POLL_MS = 30_000     // Poll conversation list every 30s (fallback when realtime is down)
+const CONVERSATIONS_IDLE_POLL_MS = 120_000 // When realtime is healthy, poll every 2 min
 const STUCK_CHANNEL_TIMEOUT_MS = 15_000
 
 /**
@@ -40,9 +41,9 @@ export function useRealtimeMessages(conversationId: string | null) {
 
     const supabase = createClient()
 
-    // 1. POLLING — the reliable base. Checks for new messages every 4 seconds.
-    //    This ensures data always flows even if realtime dies silently.
+    // 1. POLLING — the reliable base. Safety net if realtime dies silently.
     pollRef.current = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
       const state = queryClient.getQueryState(['messages', conversationId])
       // Only poll if not already fetching
       if (state?.fetchStatus !== 'fetching') {

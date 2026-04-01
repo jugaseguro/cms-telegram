@@ -28,13 +28,15 @@ export function CustomerDetailDialog({
 }: CustomerDetailDialogProps) {
   const { data: conversations } = useQuery({
     queryKey: ['customer-conversations', customer?.id],
+    staleTime: 60_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('conversations')
-        .select('*')
+        .select('id, status, created_at')
         .eq('customer_id', customer!.id)
         .order('created_at', { ascending: false })
+        .limit(50)
       if (error) throw error
       return data as Conversation[]
     },
@@ -43,13 +45,15 @@ export function CustomerDetailDialog({
 
   const { data: transactions } = useQuery({
     queryKey: ['customer-all-transactions', customer?.id],
+    staleTime: 60_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('transactions')
-        .select('*')
+        .select('id, customer_id, amount, status, created_at')
         .eq('customer_id', customer!.id)
         .order('created_at', { ascending: false })
+        .limit(100)
       if (error) throw error
       return data as Transaction[]
     },

@@ -1,5 +1,6 @@
 import type { BotContext } from '../bot'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
+import { menuStart } from '../keyboards'
 
 // Matches a UUID-like code (e.g. "abc-123-def" or standard UUID)
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
@@ -55,5 +56,18 @@ export async function handleStart(ctx: BotContext) {
     content: welcomeText,
     message_type: 'text',
     telegram_message_id: sent.message_id,
+  })
+
+  // Send action buttons so the user knows what to do next
+  const menuText = '¿Qué te gustaría hacer?'
+  const menuSent = await ctx.reply(menuText, { reply_markup: menuStart() })
+
+  await insertMessageSafe({
+    conversation_id: conversation.id,
+    sender_type: 'bot',
+    sender_id: ctx.botId,
+    content: menuText,
+    message_type: 'text',
+    telegram_message_id: menuSent.message_id,
   })
 }

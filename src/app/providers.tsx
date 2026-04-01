@@ -41,7 +41,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
         }),
         defaultOptions: {
           queries: {
-            staleTime: 30_000,
+            staleTime: 60_000,           // 60s stale time (up from 30s) — realtime/socket events handle cache invalidation
+            gcTime: 5 * 60_000,          // Keep unused query data in cache 5 min to prevent re-fetches on navigation
             refetchOnWindowFocus: false,  // Realtime WebSockets handle live updates; refetching all queries on tab focus caused connection saturation and UI freezes
             retry: 1,
             retryDelay: 2000,
