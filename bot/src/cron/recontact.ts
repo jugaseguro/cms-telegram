@@ -1,6 +1,7 @@
 import cron from 'node-cron'
 import { supabase } from '../lib/supabase'
 import type { BotManager } from '../bot-manager'
+import { getIO } from '../socket-server'
 
 interface RecontactRule {
   id: string
@@ -56,13 +57,28 @@ async function getMatchingCustomers(rule: RecontactRule, botId: string): Promise
       break
     case 'by_label': {
       if (!rule.target_label_id) return []
-      // Get customers with the target label who are inactive
+      // Get ALL customers with the target label (no inactivity filter)
+      // The time setting acts as cooldown between sends (checked via hasRecentLog)
       const { data: labeledCustomers, error: labelError } = await supabase
         .from('customer_labels')
         .select('customer_id')
         .eq('label_id', rule.target_label_id)
       if (labelError || !labeledCustomers?.length) return []
       const customerIds = labeledCustomers.map((c) => c.customer_id)
+      // Batch in groups of 50 to avoid URL length limits
+      if (customerIds.length > 50) {
+        const results: Customer[] = []
+        for (let i = 0; i < customerIds.length; i += 50) {
+          const batch = customerIds.slice(i, i + 50)
+          const { data } = await supabase
+            .from('customers')
+            .select('id, telegram_id, first_name, last_name, last_activity, has_paid, bot_id')
+            .eq('bot_id', botId)
+            .in('id', batch)
+          if (data) results.push(...(data as Customer[]))
+        }
+        return results
+      }
       query = query.in('id', customerIds)
       break
     }
@@ -93,6 +109,28 @@ async function hasRecentLog(ruleId: string, customerId: string, amount: number, 
 
   if (error) return true // err on the side of not sending
   return (count ?? 0) > 0
+}
+
+async function getOrCreateConversationId(customerId: string, botId: string): Promise<string | null> {
+  const { data: conv } = await supabase
+    .from('conversations')
+    .select('id')
+    .eq('customer_id', customerId)
+    .eq('bot_id', botId)
+    .neq('status', 'closed')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (conv?.id) return conv.id
+
+  const { data: newConv } = await supabase
+    .from('conversations')
+    .insert({ customer_id: customerId, status: 'open', bot_id: botId })
+    .select('id')
+    .single()
+
+  return newConv?.id ?? null
 }
 
 async function processRules(manager: BotManager) {
@@ -147,7 +185,24 @@ async function processRules(manager: BotManager) {
         const message = renderTemplate(rule.message_template, customer)
 
         try {
-          await bot.api.sendMessage(customer.telegram_id, message)
+          const sent = await bot.api.sendMessage(customer.telegram_id, message)
+
+          // Save message to conversation so agents can see it in the chat panel
+          try {
+            const conversationId = await getOrCreateConversationId(customer.id, botId)
+            if (conversationId) {
+              await supabase.from('messages').insert({
+                conversation_id: conversationId,
+                sender_type: 'bot',
+                sender_id: botId,
+                content: message,
+                message_type: 'text',
+                telegram_message_id: sent.message_id,
+              })
+            }
+          } catch (dbErr) {
+            console.error(`[recontact] Failed to save message to DB for ${customer.telegram_id}:`, dbErr)
+          }
 
           logBatch.push({
             rule_id: rule.id,
@@ -166,6 +221,19 @@ async function processRules(manager: BotManager) {
       if (logBatch.length > 0) {
         const { error: logError } = await supabase.from('recontact_logs').insert(logBatch)
         if (logError) console.error(`[recontact] Error batch inserting logs:`, logError.message)
+      }
+
+      // Notify connected agents via socket.io
+      if (sentCount > 0) {
+        const io = getIO()
+        if (io) {
+          io.emit('recontact:summary', {
+            ruleName: rule.name,
+            botName: config.name,
+            sent: sentCount,
+            total: customers.length,
+          })
+        }
       }
 
       if (customers.length > 0) {
