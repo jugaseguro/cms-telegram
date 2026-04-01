@@ -1,6 +1,37 @@
 import { supabase } from './lib/supabase'
 import type { Customer, Conversation } from './lib/types'
 
+// ─── In-memory cache to reduce DB roundtrips on repeated messages ────
+const CUSTOMER_CACHE_TTL = 60_000 // 60s
+const CONVERSATION_CACHE_TTL = 60_000 // 60s
+
+const customerCache = new Map<string, { data: Customer; expires: number }>()
+const conversationCache = new Map<string, { data: Conversation; expires: number }>()
+
+function getCachedCustomer(telegramId: number, botId: string): Customer | null {
+  const key = `${telegramId}:${botId}`
+  const entry = customerCache.get(key)
+  if (entry && Date.now() < entry.expires) return entry.data
+  customerCache.delete(key)
+  return null
+}
+
+function setCachedCustomer(telegramId: number, botId: string, data: Customer) {
+  customerCache.set(`${telegramId}:${botId}`, { data, expires: Date.now() + CUSTOMER_CACHE_TTL })
+}
+
+function getCachedConversation(customerId: string, botId: string): Conversation | null {
+  const key = `${customerId}:${botId}`
+  const entry = conversationCache.get(key)
+  if (entry && Date.now() < entry.expires) return entry.data
+  conversationCache.delete(key)
+  return null
+}
+
+function setCachedConversation(customerId: string, botId: string, data: Conversation) {
+  conversationCache.set(`${customerId}:${botId}`, { data, expires: Date.now() + CONVERSATION_CACHE_TTL })
+}
+
 /**
  * Check if a message with this telegram_message_id already exists in the conversation.
  */
@@ -59,10 +90,18 @@ export async function findOrCreateCustomer(
   botId: string,
   uuidLanding?: string
 ): Promise<Customer | null> {
+  // Check in-memory cache first to avoid DB roundtrip on repeated messages
+  const cached = getCachedCustomer(from.id, botId)
+  if (cached) {
+    // Fire-and-forget last_activity update (no need to wait or re-read)
+    supabase.from('customers').update({ last_activity: new Date().toISOString() }).eq('id', cached.id).then()
+    return cached
+  }
+
   // Try to find existing customer for this bot
   const { data: existing } = await supabase
     .from('customers')
-    .select('*')
+    .select('id, telegram_id, telegram_username, first_name, last_name, bot_id, status, casino_token, casino_user_id, casino_username, casino_profile, last_activity')
     .eq('telegram_id', from.id)
     .eq('bot_id', botId)
     .single()
@@ -88,7 +127,9 @@ export async function findOrCreateCustomer(
       .update(updates)
       .eq('id', existing.id)
 
-    return existing as Customer
+    const result = existing as Customer
+    setCachedCustomer(from.id, botId, result)
+    return result
   }
 
   // Create new customer
@@ -107,7 +148,9 @@ export async function findOrCreateCustomer(
     .select()
     .single()
 
-  return (newCustomer as Customer) || null
+  const result = (newCustomer as Customer) || null
+  if (result) setCachedCustomer(from.id, botId, result)
+  return result
 }
 
 /**
@@ -117,9 +160,13 @@ export async function findOrCreateConversation(
   customerId: string,
   botId: string
 ): Promise<Conversation | null> {
+  // Check in-memory cache first
+  const cached = getCachedConversation(customerId, botId)
+  if (cached) return cached
+
   const { data: existing } = await supabase
     .from('conversations')
-    .select('*')
+    .select('id, customer_id, assigned_agent_id, status, last_message_at, bot_id, pending_action, ai_paused')
     .eq('customer_id', customerId)
     .eq('bot_id', botId)
     .neq('status', 'closed')
@@ -128,7 +175,9 @@ export async function findOrCreateConversation(
     .single()
 
   if (existing) {
-    return existing as Conversation
+    const result = existing as Conversation
+    setCachedConversation(customerId, botId, result)
+    return result
   }
 
   const { data: newConversation } = await supabase
@@ -141,5 +190,14 @@ export async function findOrCreateConversation(
     .select()
     .single()
 
-  return (newConversation as Conversation) || null
+  const result = (newConversation as Conversation) || null
+  if (result) setCachedConversation(customerId, botId, result)
+  return result
+}
+
+/**
+ * Invalidate cached conversation (call when conversation state changes, e.g. pending_action).
+ */
+export function invalidateCachedConversation(customerId: string, botId: string) {
+  conversationCache.delete(`${customerId}:${botId}`)
 }

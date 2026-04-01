@@ -240,9 +240,41 @@ export async function handleTextMessage(ctx: BotContext) {
   }
 
   // -------------------------------------------------------
+  // Handle login username from inline button flow
+  // -------------------------------------------------------
+  if (conversation.pending_action?.type === 'awaiting_login_username') {
+    const username = text.trim()
+    if (!username || username.includes(' ')) {
+      await sendBotReply(ctx, conversation.id, 'Enviame solo tu nombre de usuario (sin espacios).')
+      return
+    }
+    await supabase.from('conversations').update({
+      pending_action: { type: 'awaiting_password', casino_username: username, created_at: Date.now() },
+    }).eq('id', conversation.id)
+    await sendBotReply(ctx, conversation.id, `Perfecto. Ahora enviame tu contraseña para ${username}.`)
+    return
+  }
+
+  // -------------------------------------------------------
+  // Handle register username from inline button flow
+  // -------------------------------------------------------
+  if (conversation.pending_action?.type === 'awaiting_register_username') {
+    const username = text.trim()
+    if (!username || username.length < 4 || username.includes(' ')) {
+      await sendBotReply(ctx, conversation.id, 'El usuario debe tener al menos 4 caracteres y no puede contener espacios. Probá con otro.')
+      return
+    }
+    await supabase.from('conversations').update({
+      pending_action: { type: 'awaiting_register_password', username, created_at: Date.now() },
+    }).eq('id', conversation.id)
+    await sendBotReply(ctx, conversation.id, `Buenísimo, tu usuario será "${username}". Ahora elegí una contraseña (entre 8 y 30 caracteres).`)
+    return
+  }
+
+  // -------------------------------------------------------
   // SECURITY: Intercept password BEFORE saving to DB or OpenAI
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_password') {
+  if (conversation.pending_action?.type === 'awaiting_password') {
     const casinoUsername = conversation.pending_action.casino_username as string
     const operator = ctx.casinoOperator ?? 'DEFAULT'
 
@@ -286,7 +318,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // SECURITY: Intercept register password BEFORE saving to DB or OpenAI
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_password') {
+  if (conversation.pending_action?.type === 'awaiting_register_password') {
     const pending = conversation.pending_action
 
     if (text.length < 8 || text.length > 30) {
@@ -308,7 +340,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // REGISTER: Confirmation step
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_confirm') {
+  if (conversation.pending_action?.type === 'awaiting_register_confirm') {
     const pending = conversation.pending_action
     const lower = text.toLowerCase().trim()
 
@@ -405,7 +437,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // REGISTER: New username after duplicate (password preserved)
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_register_new_username') {
+  if (conversation.pending_action?.type === 'awaiting_register_new_username') {
     const pending = conversation.pending_action
     const username = text.trim()
 
@@ -489,7 +521,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // WITHDRAWAL METHOD: User picks BT or MP
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_withdrawal_method') {
+  if (conversation.pending_action?.type === 'awaiting_withdrawal_method') {
     const trimmed = text.trim()
     console.log(`[awaiting_withdrawal_method] User said: "${trimmed}"`)
 
@@ -537,7 +569,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // DEPOSIT: Intercept deposit data (deterministic, no AI)
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_deposit_data') {
+  if (conversation.pending_action?.type === 'awaiting_deposit_data') {
     const trimmed = text.trim()
 
     // If user changes intent, clear pending_action and let message flow through
@@ -583,7 +615,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // WITHDRAWAL: Intercept withdrawal data (deterministic, no AI)
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_withdrawal_data') {
+  if (conversation.pending_action?.type === 'awaiting_withdrawal_data') {
     const trimmed = text.trim()
 
     // If user changes intent, clear pending_action and let message flow through
@@ -659,7 +691,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // RELOGIN: Confirmation when user wants to switch accounts
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.pending_action?.type === 'awaiting_relogin_confirmation') {
+  if (conversation.pending_action?.type === 'awaiting_relogin_confirmation') {
     const lower = text.toLowerCase().trim()
 
     await insertMessageSafe({
@@ -1026,7 +1058,7 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   const { data: autoResponses } = await supabase
     .from('auto_responses')
-    .select('*')
+    .select('id, trigger_text, response_text, bot_id')
     .eq('is_active', true)
     .or(`bot_id.is.null,bot_id.eq.${ctx.botId}`)
 

@@ -100,7 +100,7 @@ async function processRules(manager: BotManager) {
 
   const { data: rules, error } = await supabase
     .from('recontact_rules')
-    .select('*')
+    .select('id, name, condition_type, condition_days, condition_unit, message_template, is_active, bot_id, target_label_id')
     .eq('is_active', true)
 
   if (error) {
@@ -135,6 +135,7 @@ async function processRules(manager: BotManager) {
 
       let sentCount = 0
       let skippedCount = 0
+      const logBatch: { rule_id: string; customer_id: string; bot_id: string }[] = []
 
       for (const customer of customers) {
         const alreadySent = await hasRecentLog(rule.id, customer.id, rule.condition_days, unit)
@@ -148,7 +149,7 @@ async function processRules(manager: BotManager) {
         try {
           await bot.api.sendMessage(customer.telegram_id, message)
 
-          await supabase.from('recontact_logs').insert({
+          logBatch.push({
             rule_id: rule.id,
             customer_id: customer.id,
             bot_id: botId,
@@ -159,6 +160,12 @@ async function processRules(manager: BotManager) {
         } catch (err) {
           console.error(`[recontact] Failed to send to ${customer.telegram_id}:`, err)
         }
+      }
+
+      // Batch insert all logs at once instead of one-by-one
+      if (logBatch.length > 0) {
+        const { error: logError } = await supabase.from('recontact_logs').insert(logBatch)
+        if (logError) console.error(`[recontact] Error batch inserting logs:`, logError.message)
       }
 
       if (customers.length > 0) {

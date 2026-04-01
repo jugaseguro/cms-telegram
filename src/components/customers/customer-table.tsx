@@ -57,6 +57,7 @@ export function CustomerTable() {
   const { data: customers, isLoading, isError, refetch } = useQuery({
     queryKey: ['customers'],
     enabled: isInitialized,
+    staleTime: 120_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
@@ -72,6 +73,7 @@ export function CustomerTable() {
   const { data: allTransactions } = useQuery({
     queryKey: ['all-transactions-for-customers'],
     enabled: isInitialized,
+    staleTime: 120_000,
     queryFn: async () => {
       const supabase = createClient()
       const { data, error } = await supabase
