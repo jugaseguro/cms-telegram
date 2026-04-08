@@ -11,6 +11,7 @@ import {
   Users,
   DollarSign,
   MessageSquare,
+  MessageCircle,
   TrendingUp,
   CheckCircle,
   UserPlus,
@@ -33,7 +34,7 @@ const BotComparison = dynamic(
   }
 )
 
-type Period = 'day' | 'month' | 'year'
+type Period = 'day' | 'month' | 'year' | 'custom'
 
 function getDateRange(period: Period) {
   const now = new Date()
@@ -52,13 +53,27 @@ function getDateRange(period: Period) {
 
 export function ReportsContent() {
   const [period, setPeriod] = useState<Period>('month')
-  const range = useMemo(() => getDateRange(period), [period])
+  const [customStart, setCustomStart] = useState(() => {
+    const d = new Date()
+    d.setDate(d.getDate() - 7)
+    return d.toISOString().split('T')[0]
+  })
+  const [customEnd, setCustomEnd] = useState(() => new Date().toISOString().split('T')[0])
+
+  const range = useMemo(() => {
+    if (period === 'custom') {
+      const start = new Date(customStart + 'T00:00:00')
+      const end = new Date(customEnd + 'T23:59:59.999')
+      return { start: start.toISOString(), end: end.toISOString() }
+    }
+    return getDateRange(period)
+  }, [period, customStart, customEnd])
 
   const isInitialized = useAuthStore((s) => s.isInitialized)
   const selectedBotId = useBotStore((s) => s.selectedBotId)
 
   const { data: stats } = useQuery({
-    queryKey: ['reports-stats', period, selectedBotId],
+    queryKey: ['reports-stats', period, selectedBotId, range.start, range.end],
     enabled: isInitialized,
     queryFn: async () => {
       const supabase = createClient()
@@ -78,7 +93,8 @@ export function ReportsContent() {
         confirmed_transactions: 0,
         pending_transactions: 0,
         total_transactions: 0,
-        confirmed_amount: 0
+        confirmed_amount: 0,
+        incoming_messages: 0
       }
 
       return {
@@ -89,16 +105,17 @@ export function ReportsContent() {
         pendingTransactions: Number(stats.pending_transactions || 0),
         totalTransactions: Number(stats.total_transactions || 0),
         confirmedAmount: Number(stats.confirmed_amount || 0),
+        incomingMessages: Number(stats.incoming_messages || 0),
       }
     },
   })
 
   const { data: chartData } = useQuery({
-    queryKey: ['reports-chart', period, selectedBotId],
+    queryKey: ['reports-chart', period, selectedBotId, range.start, range.end],
     enabled: isInitialized,
     queryFn: async () => {
       const supabase = createClient()
-      const truncText = period === 'day' ? 'hour' : period === 'month' ? 'day' : 'month'
+      const truncText = period === 'day' ? 'hour' : 'day'
       const args: any = {
         p_trunc_text: truncText,
         p_start: range.start,
@@ -117,20 +134,27 @@ export function ReportsContent() {
     day: 'Hoy',
     month: 'Este mes',
     year: 'Este año',
+    custom: 'Personalizado'
   }
 
   const cards = [
     {
-      title: 'Clientes nuevos',
-      value: stats?.newCustomers ?? 0,
-      icon: UserPlus,
-      color: 'bg-status-info-bg text-status-info-icon',
+      title: 'Mensajes entrantes',
+      value: stats?.incomingMessages ?? 0,
+      icon: MessageCircle,
+      color: 'bg-primary/20 text-primary',
     },
     {
       title: 'Conversaciones',
       value: stats?.conversations ?? 0,
       icon: MessageSquare,
       color: 'bg-primary/10 text-primary',
+    },
+    {
+      title: 'Clientes nuevos',
+      value: stats?.newCustomers ?? 0,
+      icon: UserPlus,
+      color: 'bg-status-info-bg text-status-info-icon',
     },
     {
       title: 'Transacciones confirmadas',
@@ -162,20 +186,40 @@ export function ReportsContent() {
 
   return (
     <div className="space-y-6">
-      <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
-        {(['day', 'month', 'year'] as const).map((p) => (
-          <button
-            key={p}
-            onClick={() => setPeriod(p)}
-            className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
-              period === p
-                ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
-                : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
-            }`}
-          >
-            {periodLabels[p]}
-          </button>
-        ))}
+      <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
+        <div className="inline-flex items-center gap-1 rounded-xl bg-muted/60 p-1">
+          {(['day', 'month', 'year', 'custom'] as const).map((p) => (
+            <button
+              key={p}
+              onClick={() => setPeriod(p)}
+              className={`rounded-lg px-4 py-2 text-sm font-medium transition-all duration-200 cursor-pointer ${
+                period === p
+                  ? 'bg-primary text-primary-foreground shadow-md shadow-primary/20'
+                  : 'text-muted-foreground hover:text-foreground hover:bg-background/60'
+              }`}
+            >
+              {periodLabels[p]}
+            </button>
+          ))}
+        </div>
+
+        {period === 'custom' && (
+          <div className="flex items-center gap-2 text-sm bg-muted/30 p-2 rounded-lg border">
+            <input 
+              type="date" 
+              value={customStart} 
+              onChange={e => setCustomStart(e.target.value)} 
+              className="bg-transparent outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
+            />
+            <span className="text-muted-foreground">a</span>
+            <input 
+              type="date" 
+              value={customEnd} 
+              onChange={e => setCustomEnd(e.target.value)}
+              className="bg-transparent outline-none focus:ring-1 focus:ring-primary rounded px-2 py-1"
+            />
+          </div>
+        )}
       </div>
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -212,7 +256,7 @@ export function ReportsContent() {
 function formatChartSeries(period: Period, rows: any[]) {
   const buckets = new Map<
     string,
-    { label: string; conversaciones: number; transacciones: number; clientes: number; pagados: number }
+    { label: string; conversaciones: number; transacciones: number; clientes: number; pagados: number; incomingMessages: number }
   >()
 
   function getKey(dateStr: string) {
@@ -229,7 +273,7 @@ function formatChartSeries(period: Period, rows: any[]) {
 
   function ensureBucket(key: string) {
     if (!buckets.has(key)) {
-      buckets.set(key, { label: key, conversaciones: 0, transacciones: 0, clientes: 0, pagados: 0 })
+      buckets.set(key, { label: key, conversaciones: 0, transacciones: 0, clientes: 0, pagados: 0, incomingMessages: 0 })
     }
     return buckets.get(key)!
   }
@@ -245,7 +289,7 @@ function formatChartSeries(period: Period, rows: any[]) {
     for (let d = 1; d <= now.getDate(); d++) {
       ensureBucket(`${d.toString().padStart(2, '0')}/${(now.getMonth() + 1).toString().padStart(2, '0')}`)
     }
-  } else {
+  } else if (period === 'year') {
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic']
     const now = new Date().getMonth()
     for (let m = 0; m <= now; m++) {
@@ -261,6 +305,7 @@ function formatChartSeries(period: Period, rows: any[]) {
     b.transacciones += Number(row.transactions_count || 0)
     b.pagados += Number(row.paid_transactions_count || 0)
     b.clientes += Number(row.customers_count || 0)
+    b.incomingMessages = (b.incomingMessages || 0) + Number(row.incoming_messages_count || 0)
   }
 
   return Array.from(buckets.values()).sort((a, b) => {
