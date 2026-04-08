@@ -2,8 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { QueryError } from '@/components/ui/query-error'
+
+const MassMessageDialog = dynamic(
+  () => import('@/components/customers/mass-message-dialog').then((m) => ({ default: m.MassMessageDialog })),
+  { ssr: false }
+)
 import {
   Table,
   TableBody,
@@ -31,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Send } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -54,6 +60,7 @@ export function RecontactContent() {
   const selectedBotId = useBotStore((s) => s.selectedBotId)
   const { data: allLabels } = useLabels()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [massMessageOpen, setMassMessageOpen] = useState(false)
   const [editing, setEditing] = useState<RecontactRule | null>(null)
   const [form, setForm] = useState({
     name: '',
@@ -220,10 +227,16 @@ export function RecontactContent() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Recontacto automático</h1>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva regla
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setMassMessageOpen(true)} variant="outline">
+            <Send className="mr-2 h-4 w-4" />
+            Mensaje masivo
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva regla
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -515,6 +528,11 @@ export function RecontactContent() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <MassMessageDialog 
+        open={massMessageOpen}
+        onOpenChange={setMassMessageOpen}
+      />
     </>
   )
 }
