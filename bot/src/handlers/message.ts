@@ -1,6 +1,6 @@
 import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe, trackMassMessageReply } from '../helpers'
 import type { AutoResponse } from '../lib/types'
 import { buildHistory, callAI, checkRateLimit } from '../ai/openai'
 import { loginCasino, registerCasino, getBalance, validateJwtQuick, createDeposit, getProviderId, createWithdrawal, getTransactions, CasinoAuthError } from '../api/casino'
@@ -409,7 +409,12 @@ export async function handleTextMessage(ctx: BotContext) {
           await sendBotReply(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nNo pude iniciar sesión automáticamente. Tocá el botón para ingresar:`, { reply_markup: menuAuth() })
         }
       } else {
-        await sendBotReply(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.')
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword), created_at: Date.now() } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'No se pudo crear la cuenta. Es posible que el usuario ya esté en uso. Probá con otro nombre de usuario:')
       }
     } catch (err: any) {
       if (err.message === 'casino_user_exists') {
@@ -428,7 +433,12 @@ export async function handleTextMessage(ctx: BotContext) {
 
         await sendBotReply(ctx, conversation.id, 'La contraseña no es válida. Debe tener entre 8 y 30 caracteres. Intentá con otra.')
       } else {
-        await sendBotReply(ctx, conversation.id, 'Hubo un error al crear la cuenta. Intentá de nuevo en un momento.')
+        await supabase
+          .from('conversations')
+          .update({ pending_action: { type: 'awaiting_register_new_username', password: encryptToken(plainPassword), created_at: Date.now() } })
+          .eq('id', conversation.id)
+
+        await sendBotReply(ctx, conversation.id, 'No se pudo crear la cuenta. Es posible que el usuario ya esté en uso o haya un problema temporal. Probá con otro nombre de usuario:')
       }
     }
     return
@@ -730,6 +740,9 @@ export async function handleTextMessage(ctx: BotContext) {
     message_type: 'text',
     telegram_message_id: ctx.message?.message_id || null,
   })
+
+  // Fire-and-forget: track if this is a reply to a mass message campaign
+  trackMassMessageReply(conversation.id).catch(() => {})
 
   // -------------------------------------------------------
   // AI path

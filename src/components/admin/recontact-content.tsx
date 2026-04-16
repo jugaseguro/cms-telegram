@@ -2,8 +2,14 @@
 
 import { useState, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import dynamic from 'next/dynamic'
 import { createClient } from '@/lib/supabase/client'
 import { QueryError } from '@/components/ui/query-error'
+
+const MassMessageDialog = dynamic(
+  () => import('@/components/customers/mass-message-dialog').then((m) => ({ default: m.MassMessageDialog })),
+  { ssr: false }
+)
 import {
   Table,
   TableBody,
@@ -31,7 +37,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus, Pencil, Trash2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Send, BarChart3 } from 'lucide-react'
 import { toast } from 'sonner'
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
@@ -39,7 +45,7 @@ import { useLabels } from '@/hooks/use-labels'
 import { useAuthStore } from '@/stores/auth-store'
 import { useBotStore } from '@/stores/bot-store'
 import { getSocket } from '@/lib/socket'
-import type { RecontactRule, RecontactLog } from '@/lib/supabase/types'
+import type { RecontactRule, RecontactLog, MassMessageCampaignWithDetails } from '@/lib/supabase/types'
 
 const conditionLabels: Record<string, string> = {
   inactive_days: 'Inactivo (días)',
@@ -54,6 +60,7 @@ export function RecontactContent() {
   const selectedBotId = useBotStore((s) => s.selectedBotId)
   const { data: allLabels } = useLabels()
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [massMessageOpen, setMassMessageOpen] = useState(false)
   const [editing, setEditing] = useState<RecontactRule | null>(null)
   const [form, setForm] = useState({
     name: '',
@@ -99,6 +106,26 @@ export function RecontactContent() {
         customers: { first_name: string | null; last_name: string | null; telegram_username: string | null }
         recontact_rules: { name: string }
       })[]
+    },
+  })
+
+  const { data: campaigns } = useQuery({
+    queryKey: ['mass-message-campaigns', selectedBotId],
+    enabled: isInitialized,
+    refetchInterval: 30_000, // Auto-refresh every 30s to update reply counts
+    queryFn: async () => {
+      const supabase = createClient()
+      let query = supabase
+        .from('mass_message_campaigns')
+        .select('*, bots(id, name, color), labels(id, name, color), profiles(id, full_name)')
+        .order('created_at', { ascending: false })
+        .limit(20)
+      if (selectedBotId) {
+        query = query.eq('bot_id', selectedBotId)
+      }
+      const { data, error } = await query
+      if (error) throw error
+      return data as MassMessageCampaignWithDetails[]
     },
   })
 
@@ -220,10 +247,16 @@ export function RecontactContent() {
     <>
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold">Recontacto automático</h1>
-        <Button onClick={openCreate}>
-          <Plus className="mr-2 h-4 w-4" />
-          Nueva regla
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setMassMessageOpen(true)} variant="outline">
+            <Send className="mr-2 h-4 w-4" />
+            Mensaje masivo
+          </Button>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            Nueva regla
+          </Button>
+        </div>
       </div>
 
       <div className="rounded-lg border bg-card">
@@ -352,6 +385,93 @@ export function RecontactContent() {
                         addSuffix: true,
                         locale: es,
                       })}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      )}
+
+      {campaigns && campaigns.length > 0 && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-muted-foreground" />
+            <h2 className="text-lg font-semibold">Historial de envíos masivos</h2>
+          </div>
+          <div className="rounded-lg border bg-card">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Fecha</TableHead>
+                  <TableHead>Bot</TableHead>
+                  <TableHead>Etiqueta</TableHead>
+                  <TableHead>Mensaje</TableHead>
+                  <TableHead className="text-center">Dirigidos</TableHead>
+                  <TableHead className="text-center">Enviados</TableHead>
+                  <TableHead className="text-center">Respondieron</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {campaigns.map((c) => (
+                  <TableRow key={c.id}>
+                    <TableCell className="text-muted-foreground whitespace-nowrap" suppressHydrationWarning>
+                      {formatDistanceToNow(new Date(c.created_at), {
+                        addSuffix: true,
+                        locale: es,
+                      })}
+                    </TableCell>
+                    <TableCell>
+                      {c.bots ? (
+                        <Badge
+                          variant="outline"
+                          style={{ borderColor: c.bots.color, color: c.bots.color }}
+                        >
+                          {c.bots.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {c.labels ? (
+                        <Badge variant="secondary" className="gap-1.5">
+                          <span
+                            className="h-2 w-2 rounded-full inline-block"
+                            style={{ backgroundColor: c.labels.color }}
+                          />
+                          {c.labels.name}
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="max-w-[200px]">
+                      <p className="text-sm truncate">
+                        {c.message_text || `[${c.message_type}]`}
+                      </p>
+                    </TableCell>
+                    <TableCell className="text-center font-medium">
+                      {c.total_targeted}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className={c.total_sent === c.total_targeted ? 'text-green-600' : 'text-yellow-600'}>
+                        {c.total_sent}
+                      </span>
+                      {c.total_sent < c.total_targeted && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({c.total_targeted - c.total_sent} fallidos)
+                        </span>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <span className="font-medium">{c.total_replied}</span>
+                      {c.total_sent > 0 && (
+                        <span className="text-xs text-muted-foreground ml-1">
+                          ({Math.round((c.total_replied / c.total_sent) * 100)}%)
+                        </span>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -515,6 +635,11 @@ export function RecontactContent() {
           </form>
         </DialogContent>
       </Dialog>
+
+      <MassMessageDialog 
+        open={massMessageOpen}
+        onOpenChange={setMassMessageOpen}
+      />
     </>
   )
 }

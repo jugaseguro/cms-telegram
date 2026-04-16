@@ -19,17 +19,19 @@ interface ChartDataPoint {
   transacciones: number
   clientes: number
   pagados: number
+  incomingMessages?: number
 }
 
 interface ReportsChartProps {
   data: ChartDataPoint[]
-  period: 'day' | 'month' | 'year'
+  period: 'day' | 'month' | 'year' | 'custom'
 }
 
 const periodTitles = {
   day: 'Actividad de hoy',
   month: 'Actividad del mes',
   year: 'Actividad del año',
+  custom: 'Rango personalizado'
 }
 
 export const ReportsChart = memo(function ReportsChart({ data, period }: ReportsChartProps) {
@@ -78,6 +80,12 @@ export const ReportsChart = memo(function ReportsChart({ data, period }: Reports
                 dataKey="conversaciones"
                 name="Conversaciones"
                 fill="oklch(0.72 0.12 230)"
+                radius={[6, 6, 0, 0]}
+              />
+              <Bar
+                dataKey="incomingMessages"
+                name="Mensajes entrantes"
+                fill="oklch(0.60 0.15 280)"
                 radius={[6, 6, 0, 0]}
               />
               <Bar

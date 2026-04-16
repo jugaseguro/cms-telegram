@@ -707,6 +707,126 @@ export type Database = {
           }
         ]
       }
+      mass_message_campaigns: {
+        Row: {
+          id: string
+          bot_id: string
+          label_id: string
+          sent_by: string
+          message_text: string | null
+          message_type: 'text' | 'image' | 'document'
+          media_url: string | null
+          total_targeted: number
+          total_sent: number
+          total_delivered: number
+          total_replied: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          bot_id: string
+          label_id: string
+          sent_by: string
+          message_text?: string | null
+          message_type?: 'text' | 'image' | 'document'
+          media_url?: string | null
+          total_targeted?: number
+          total_sent?: number
+          total_delivered?: number
+          total_replied?: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          bot_id?: string
+          label_id?: string
+          sent_by?: string
+          message_text?: string | null
+          message_type?: 'text' | 'image' | 'document'
+          media_url?: string | null
+          total_targeted?: number
+          total_sent?: number
+          total_delivered?: number
+          total_replied?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mass_message_campaigns_bot_id_fkey"
+            columns: ["bot_id"]
+            isOneToOne: false
+            referencedRelation: "bots"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mass_message_campaigns_label_id_fkey"
+            columns: ["label_id"]
+            isOneToOne: false
+            referencedRelation: "labels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mass_message_campaigns_sent_by_fkey"
+            columns: ["sent_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      mass_message_recipients: {
+        Row: {
+          id: string
+          campaign_id: string
+          customer_id: string
+          conversation_id: string
+          telegram_message_id: number | null
+          status: 'pending' | 'sent' | 'failed'
+          replied_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          campaign_id: string
+          customer_id: string
+          conversation_id: string
+          telegram_message_id?: number | null
+          status?: 'pending' | 'sent' | 'failed'
+          replied_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          campaign_id?: string
+          customer_id?: string
+          conversation_id?: string
+          telegram_message_id?: number | null
+          status?: 'pending' | 'sent' | 'failed'
+          replied_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mass_message_recipients_campaign_id_fkey"
+            columns: ["campaign_id"]
+            isOneToOne: false
+            referencedRelation: "mass_message_campaigns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mass_message_recipients_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mass_message_recipients_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
     }
     Views: {
       [_ in never]: never
@@ -785,4 +905,13 @@ export type CustomerLabelWithDetails = CustomerLabel & {
 
 export type ConversationWithCustomerAndLabels = ConversationWithCustomer & {
   conversation_labels?: { labels: Label }[]
+}
+
+export type MassMessageCampaign = Database['public']['Tables']['mass_message_campaigns']['Row']
+export type MassMessageRecipient = Database['public']['Tables']['mass_message_recipients']['Row']
+
+export type MassMessageCampaignWithDetails = MassMessageCampaign & {
+  bots: Pick<Bot, 'id' | 'name' | 'color'> | null
+  labels: Pick<Label, 'id' | 'name' | 'color'> | null
+  profiles: Pick<Profile, 'id' | 'full_name'> | null
 }

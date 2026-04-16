@@ -1,6 +1,6 @@
 import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
-import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
+import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe, trackMassMessageReply } from '../helpers'
 
 export async function handlePhoto(ctx: BotContext) {
   const from = ctx.from
@@ -63,6 +63,9 @@ export async function handlePhoto(ctx: BotContext) {
     media_url: mediaUrl,
     telegram_message_id: ctx.message?.message_id || null,
   })
+
+  // Fire-and-forget: track if this is a reply to a mass message campaign
+  trackMassMessageReply(conversation.id).catch(() => {})
 
   // Default: acknowledge photo receipt for agent review
   await ctx.reply('✅ Comprobante recibido. Un agente lo revisará en breve.')

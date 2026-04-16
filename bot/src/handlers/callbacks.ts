@@ -35,6 +35,9 @@ export async function handleCallbackQuery(ctx: BotContext) {
     case 'menu:register': {
       await sendAndSave(ctx, conversation.id,
         '¡Genial! Para crear tu cuenta, enviame el nombre de usuario (nickname) que querés usar.')
+      await supabase.from('conversations').update({
+        pending_action: { type: 'awaiting_register_username', created_at: Date.now() },
+      }).eq('id', conversation.id)
       break
     }
 
@@ -43,6 +46,9 @@ export async function handleCallbackQuery(ctx: BotContext) {
     case 'menu:login': {
       await sendAndSave(ctx, conversation.id,
         'Enviame tu nombre de usuario para iniciar sesión.')
+      await supabase.from('conversations').update({
+        pending_action: { type: 'awaiting_login_username', created_at: Date.now() },
+      }).eq('id', conversation.id)
       break
     }
 
@@ -54,17 +60,23 @@ export async function handleCallbackQuery(ctx: BotContext) {
           'Para cargar saldo primero necesitás tener una cuenta. ¿Querés crear una o ya tenés?',
           { reply_markup: menuAuth() })
       } else {
-        if (!await validateJwtQuick(decryptToken(customer.casino_token))) {
+        try {
+          if (!await validateJwtQuick(decryptToken(customer.casino_token))) {
+            await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
+            await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
+            break
+          }
+          const casinoUserName = customer.casino_username ?? 'tu cuenta'
+          await sendAndSave(ctx, conversation.id,
+            `Vas a cargar saldo a la cuenta "${casinoUserName}".\n\nPasame los datos del titular de la transferencia: nombre, apellido y monto.\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\nJuan Perez 5000`)
+          await supabase.from('conversations').update({
+            pending_action: { type: 'awaiting_deposit_data', casino_username: casinoUserName, created_at: Date.now() },
+          }).eq('id', conversation.id)
+        } catch (err) {
+          console.error('Deposit callback error:', err)
           await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
           await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
-          break
         }
-        const casinoUserName = customer.casino_username ?? 'tu cuenta'
-        await sendAndSave(ctx, conversation.id,
-          `Vas a cargar saldo a la cuenta "${casinoUserName}".\n\nPasame los datos del titular de la transferencia: nombre, apellido y monto.\n\nPodés mandarlo todo en un solo mensaje, por ejemplo:\nJuan Perez 5000`)
-        await supabase.from('conversations').update({
-          pending_action: { type: 'awaiting_deposit_data', casino_username: casinoUserName, created_at: Date.now() },
-        }).eq('id', conversation.id)
       }
       break
     }
@@ -77,17 +89,23 @@ export async function handleCallbackQuery(ctx: BotContext) {
           { reply_markup: menuAuth() })
         break
       }
-      if (!await validateJwtQuick(decryptToken(customer.casino_token))) {
+      try {
+        if (!await validateJwtQuick(decryptToken(customer.casino_token))) {
+          await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
+          await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
+          break
+        }
+        await sendAndSave(ctx, conversation.id,
+          '¿Por qué método querés retirar?',
+          { reply_markup: withdrawMethod() })
+        await supabase.from('conversations').update({
+          pending_action: { type: 'awaiting_withdrawal_method', created_at: Date.now() },
+        }).eq('id', conversation.id)
+      } catch (err) {
+        console.error('Withdraw callback error:', err)
         await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
         await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
-        break
       }
-      await sendAndSave(ctx, conversation.id,
-        '¿Por qué método querés retirar?',
-        { reply_markup: withdrawMethod() })
-      await supabase.from('conversations').update({
-        pending_action: { type: 'awaiting_withdrawal_method', created_at: Date.now() },
-      }).eq('id', conversation.id)
       break
     }
 
@@ -115,6 +133,7 @@ export async function handleCallbackQuery(ctx: BotContext) {
       try {
         const encSession = (customer.casino_profile as any)?.session
         if (!encSession) {
+          await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
           await sendAndSave(ctx, conversation.id, 'Primero necesitás iniciar sesión.', { reply_markup: menuAuth() })
           break
         }
@@ -126,12 +145,9 @@ export async function handleCallbackQuery(ctx: BotContext) {
           await sendAndSave(ctx, conversation.id, `Tu saldo actual es: $${balance.toLocaleString('es-AR')} ARS\n\n¿Qué más querés hacer?`, { reply_markup: menuLoggedIn() })
         }
       } catch (err) {
-        if (err instanceof CasinoAuthError) {
-          await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
-          await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
-        } else {
-          await sendAndSave(ctx, conversation.id, 'Hubo un error. Intentá de nuevo en un momento.', { reply_markup: menuLoggedIn() })
-        }
+        console.error('Balance callback error:', err)
+        await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
+        await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
       }
       break
     }
@@ -157,12 +173,9 @@ export async function handleCallbackQuery(ctx: BotContext) {
           await sendAndSave(ctx, conversation.id, `Tus últimos movimientos:\n\n${lines.join('\n')}\n\n¿Qué más querés hacer?`, { reply_markup: menuLoggedIn() })
         }
       } catch (err) {
-        if (err instanceof CasinoAuthError) {
-          await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
-          await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
-        } else {
-          await sendAndSave(ctx, conversation.id, 'Hubo un error. Intentá de nuevo en un momento.', { reply_markup: menuLoggedIn() })
-        }
+        console.error('Transactions callback error:', err)
+        await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
+        await sendAndSave(ctx, conversation.id, 'Tu sesión expiró. Ingresá de nuevo para continuar.', { reply_markup: menuAuth() })
       }
       break
     }
@@ -229,7 +242,10 @@ export async function handleCallbackQuery(ctx: BotContext) {
               await sendAndSave(ctx, conversation.id, `¡Cuenta creada exitosamente, ${pending.username}! 🎉\n\nNo pude iniciar sesión automáticamente. Tocá el botón para ingresar:`, { reply_markup: menuAuth() })
             }
           } else {
-            await sendAndSave(ctx, conversation.id, 'No pude crear la cuenta. Intentá de nuevo en un momento.', { reply_markup: menuNotLoggedIn() })
+            await supabase.from('conversations').update({
+              pending_action: { type: 'awaiting_register_new_username', password: pending.password, created_at: Date.now() },
+            }).eq('id', conversation.id)
+            await sendAndSave(ctx, conversation.id, 'No se pudo crear la cuenta. Es posible que el usuario ya esté en uso. Probá con otro nombre de usuario:')
           }
         } catch (err: any) {
           if (err.message === 'casino_user_exists') {
@@ -238,7 +254,10 @@ export async function handleCallbackQuery(ctx: BotContext) {
             }).eq('id', conversation.id)
             await sendAndSave(ctx, conversation.id, 'Ese usuario ya está en uso. Elegí otro nombre de usuario (tu contraseña se mantiene).')
           } else {
-            await sendAndSave(ctx, conversation.id, 'Hubo un error al crear la cuenta. Intentá de nuevo en un momento.', { reply_markup: menuNotLoggedIn() })
+            await supabase.from('conversations').update({
+              pending_action: { type: 'awaiting_register_new_username', password: pending.password, created_at: Date.now() },
+            }).eq('id', conversation.id)
+            await sendAndSave(ctx, conversation.id, 'No se pudo crear la cuenta. Es posible que el usuario ya esté en uso o haya un problema temporal. Probá con otro nombre de usuario:')
           }
         }
       }
@@ -251,7 +270,15 @@ export async function handleCallbackQuery(ctx: BotContext) {
 
       if (pending.type === 'awaiting_agent_confirmation') {
         await supabase.from('conversations').update({ pending_action: null }).eq('id', conversation.id)
-        const kb = customer.casino_token ? menuLoggedIn() : menuNotLoggedIn()
+        let validSession = false
+        if (customer.casino_token) {
+          try {
+            validSession = await validateJwtQuick(decryptToken(customer.casino_token))
+          } catch {
+            await supabase.from('customers').update({ casino_token: null, casino_profile: null }).eq('id', customer.id)
+          }
+        }
+        const kb = validSession ? menuLoggedIn() : menuNotLoggedIn()
         await sendAndSave(ctx, conversation.id, 'Perfecto, seguimos acá. ¿En qué más puedo ayudarte?', { reply_markup: kb })
       } else if (pending.type === 'awaiting_relogin_confirmation') {
         await supabase.from('conversations').update({ pending_action: null }).eq('id', conversation.id)

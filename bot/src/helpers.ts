@@ -201,3 +201,55 @@ export async function findOrCreateConversation(
 export function invalidateCachedConversation(customerId: string, botId: string) {
   conversationCache.delete(`${customerId}:${botId}`)
 }
+
+/**
+ * Track if a customer message is a reply to a mass message campaign.
+ * Looks for recent unreplied mass_message_recipients for this conversation
+ * and marks the first one as replied, incrementing the campaign counter.
+ * Fire-and-forget — errors are logged but don't interrupt the message flow.
+ */
+export async function trackMassMessageReply(conversationId: string): Promise<void> {
+  try {
+    // Find unreplied recipients for this conversation from the last 7 days
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+    const { data: recipient, error } = await supabase
+      .from('mass_message_recipients')
+      .select('id, campaign_id')
+      .eq('conversation_id', conversationId)
+      .eq('status', 'sent')
+      .is('replied_at', null)
+      .gte('created_at', sevenDaysAgo)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    if (error || !recipient) return
+
+    // Mark this recipient as replied
+    const { error: updateError } = await supabase
+      .from('mass_message_recipients')
+      .update({ replied_at: new Date().toISOString() })
+      .eq('id', recipient.id)
+      .is('replied_at', null) // optimistic lock: only update if still null
+
+    if (updateError) return
+
+    // Increment the campaign's total_replied counter via raw SQL for atomicity
+    // Fallback: use a simple update since supabase-js doesn't support increment
+    const { data: campaign } = await supabase
+      .from('mass_message_campaigns')
+      .select('total_replied')
+      .eq('id', recipient.campaign_id)
+      .single()
+
+    if (campaign) {
+      await supabase
+        .from('mass_message_campaigns')
+        .update({ total_replied: campaign.total_replied + 1 })
+        .eq('id', recipient.campaign_id)
+    }
+  } catch (err) {
+    console.error('[trackMassMessageReply] Error:', err)
+  }
+}
