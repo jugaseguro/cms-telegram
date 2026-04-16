@@ -742,7 +742,8 @@ export async function handleTextMessage(ctx: BotContext) {
   })
 
   // Fire-and-forget: track if this is a reply to a mass message campaign
-  trackMassMessageReply(conversation.id).catch(() => {})
+  console.log('[message-handler] Calling trackMassMessageReply for conversation:', conversation.id)
+  trackMassMessageReply(conversation.id).catch((err) => { console.error('Caught tracking error:', err) })
 
   // -------------------------------------------------------
   // AI path

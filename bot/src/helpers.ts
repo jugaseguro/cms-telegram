@@ -210,6 +210,8 @@ export function invalidateCachedConversation(customerId: string, botId: string) 
  */
 export async function trackMassMessageReply(conversationId: string): Promise<void> {
   try {
+    console.log('[trackMassMessageReply] Checking conversation:', conversationId)
+
     // Find unreplied recipients for this conversation from the last 7 days
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -224,6 +226,8 @@ export async function trackMassMessageReply(conversationId: string): Promise<voi
       .limit(1)
       .maybeSingle()
 
+    console.log('[trackMassMessageReply] Query result:', { recipient, error: error?.message })
+
     if (error || !recipient) return
 
     // Mark this recipient as replied
@@ -233,10 +237,12 @@ export async function trackMassMessageReply(conversationId: string): Promise<voi
       .eq('id', recipient.id)
       .is('replied_at', null) // optimistic lock: only update if still null
 
-    if (updateError) return
+    if (updateError) {
+      console.error('[trackMassMessageReply] Update error:', updateError.message)
+      return
+    }
 
-    // Increment the campaign's total_replied counter via raw SQL for atomicity
-    // Fallback: use a simple update since supabase-js doesn't support increment
+    // Increment the campaign's total_replied counter
     const { data: campaign } = await supabase
       .from('mass_message_campaigns')
       .select('total_replied')
@@ -248,6 +254,7 @@ export async function trackMassMessageReply(conversationId: string): Promise<voi
         .from('mass_message_campaigns')
         .update({ total_replied: campaign.total_replied + 1 })
         .eq('id', recipient.campaign_id)
+      console.log('[trackMassMessageReply] ✅ Marked as replied for campaign:', recipient.campaign_id)
     }
   } catch (err) {
     console.error('[trackMassMessageReply] Error:', err)
