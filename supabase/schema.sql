@@ -15,6 +15,7 @@ create table public.bots (
   telegram_username text,
   token_encrypted text not null,
   is_active boolean not null default true,
+  is_paused boolean not null default false,
   color text not null default '#3b82f6',
   welcome_message text,
   ai_enabled boolean not null default false,

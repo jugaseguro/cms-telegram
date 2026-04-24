@@ -180,6 +180,25 @@ function validateWithdrawArgs(args: Record<string, unknown>, channel: string = '
 // Handler
 // -------------------------------------------------------
 
+async function getBotPausedState(botId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('bots')
+      .select('is_paused')
+      .eq('id', botId)
+      .single()
+    
+    if (error) {
+      console.error('[message] Error fetching bot pause state:', error)
+      return false
+    }
+    return data?.is_paused ?? false
+  } catch (err) {
+    console.error('[message] Exception fetching bot pause state:', err)
+    return false
+  }
+}
+
 export async function handleTextMessage(ctx: BotContext) {
   const from = ctx.from
   const text = ctx.message?.text
@@ -195,6 +214,48 @@ export async function handleTextMessage(ctx: BotContext) {
 
   // Dedup check
   if (await isMessageAlreadySaved(conversation.id, ctx.message?.message_id)) return
+
+  // -------------------------------------------------------
+  // PAUSED STATE - Verify directly from DB for reliability
+  // -------------------------------------------------------
+  const isPausedFromDB = await getBotPausedState(ctx.botId)
+  console.log(`[message] isPaused from DB:`, isPausedFromDB, 'for bot:', ctx.botId)
+  
+  if (isPausedFromDB) {
+    // If bot is paused, we only save the message so it appears in the CMS.
+    // No auto-responses, no pending actions, no AI.
+    console.log(`[message] Bot is PAUSED (from DB), saving message only`)
+    await insertMessageSafe({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      sender_id: String(from.id),
+      content: text,
+      message_type: 'text',
+      telegram_message_id: ctx.message?.message_id || null,
+    })
+    return
+  }
+
+  // -------------------------------------------------------
+  // AI PAUSED (per-conversation) — Agent took over
+  // Save message but skip ALL automated processing
+  // -------------------------------------------------------
+  if (conversation.ai_paused) {
+    console.log(`[message] Conversation AI is PAUSED for conv ${conversation.id}, saving message only`)
+    await insertMessageSafe({
+      conversation_id: conversation.id,
+      sender_type: 'customer',
+      sender_id: String(from.id),
+      content: text,
+      message_type: 'text',
+      telegram_message_id: ctx.message?.message_id || null,
+    })
+    // Track mass message replies even when paused
+    trackMassMessageReply(conversation.id).catch((err) => {
+      console.error('Caught tracking error:', err)
+    })
+    return
+  }
 
   // -------------------------------------------------------
   // TTL: Clear stale pending_action (>5 min)
@@ -748,10 +809,6 @@ export async function handleTextMessage(ctx: BotContext) {
   // -------------------------------------------------------
   // AI path
   // -------------------------------------------------------
-  if (ctx.aiEnabled && conversation.ai_paused) {
-    // Bot is paused by an agent — save message but don't process with AI
-    return
-  }
 
   if (ctx.aiEnabled) {
     // Injection filter — block before calling OpenAI

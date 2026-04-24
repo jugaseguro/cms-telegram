@@ -19,6 +19,7 @@ const updateBotSchema = z.object({
   telegram_username: z.string().trim().min(1).nullable().optional(),
   color: colorSchema.optional(),
   is_active: z.boolean().optional(),
+  is_paused: z.boolean().optional(),
   welcome_message: z.string().trim().nullable().optional(),
 })
 
@@ -68,7 +69,7 @@ export async function GET() {
 
   const { data, error } = await supabase
     .from('bots')
-    .select('id, name, telegram_username, is_active, color, welcome_message, created_at')
+    .select('id, name, telegram_username, is_active, is_paused, color, welcome_message, created_at')
     .order('created_at')
 
   if (error) {
@@ -103,7 +104,7 @@ export async function POST(request: Request) {
       color: color || '#3b82f6',
       welcome_message: welcome_message || null,
     })
-    .select('id, name, telegram_username, is_active, color, welcome_message, created_at')
+    .select('id, name, telegram_username, is_active, is_paused, color, welcome_message, created_at')
     .single()
 
   if (error) {
@@ -128,20 +129,21 @@ export async function PATCH(request: Request) {
     })
   }
 
-  const { id, name, token, telegram_username, color, is_active, welcome_message } = parsed.data
+  const { id, name, token, telegram_username, color, is_active, is_paused, welcome_message } = parsed.data
   const updates: Record<string, unknown> = {}
   if (name !== undefined) updates.name = name
   if (token !== undefined) updates.token_encrypted = token
   if (telegram_username !== undefined) updates.telegram_username = telegram_username
   if (color !== undefined) updates.color = color
   if (is_active !== undefined) updates.is_active = is_active
+  if (is_paused !== undefined) updates.is_paused = is_paused
   if (welcome_message !== undefined) updates.welcome_message = welcome_message || null
 
   const { data, error } = await admin.supabase
     .from('bots')
     .update(updates)
     .eq('id', id)
-    .select('id, name, telegram_username, is_active, color, welcome_message, created_at')
+    .select('id, name, telegram_username, is_active, is_paused, color, welcome_message, created_at')
     .single()
 
   if (error) {

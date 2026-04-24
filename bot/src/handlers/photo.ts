@@ -2,6 +2,18 @@ import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe, trackMassMessageReply } from '../helpers'
 
+async function getBotPausedState(botId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('bots')
+      .select('is_paused')
+      .eq('id', botId)
+      .single()
+    if (error) return false
+    return data?.is_paused ?? false
+  } catch { return false }
+}
+
 export async function handlePhoto(ctx: BotContext) {
   const from = ctx.from
   const photo = ctx.message?.photo
@@ -64,8 +76,11 @@ export async function handlePhoto(ctx: BotContext) {
     telegram_message_id: ctx.message?.message_id || null,
   })
 
-  // Fire-and-forget: track if this is a reply to a mass message campaign
   trackMassMessageReply(conversation.id).catch(() => {})
+
+  const isPausedFromDB = await getBotPausedState(ctx.botId)
+  console.log(`[photo] isPaused from DB:`, isPausedFromDB)
+  if (isPausedFromDB) return
 
   // Default: acknowledge photo receipt for agent review
   await ctx.reply('✅ Comprobante recibido. Un agente lo revisará en breve.')

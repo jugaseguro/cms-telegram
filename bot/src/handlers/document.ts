@@ -2,6 +2,18 @@ import type { BotContext } from '../bot'
 import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe, trackMassMessageReply } from '../helpers'
 
+async function getBotPausedState(botId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('bots')
+      .select('is_paused')
+      .eq('id', botId)
+      .single()
+    if (error) return false
+    return data?.is_paused ?? false
+  } catch { return false }
+}
+
 export async function handleDocument(ctx: BotContext) {
   const from = ctx.from
   const document = ctx.message?.document
@@ -55,8 +67,11 @@ export async function handleDocument(ctx: BotContext) {
     telegram_message_id: ctx.message?.message_id || null,
   })
 
-  // Fire-and-forget: track if this is a reply to a mass message campaign
   trackMassMessageReply(conversation.id).catch(() => {})
+
+  const isPausedFromDB = await getBotPausedState(ctx.botId)
+  console.log(`[document] isPaused from DB:`, isPausedFromDB)
+  if (isPausedFromDB) return
 
   await ctx.reply('✅ Documento recibido. Un agente lo revisará en breve.')
 }

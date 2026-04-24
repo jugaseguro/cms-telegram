@@ -14,7 +14,7 @@ export class BotManager {
   async loadBots(): Promise<void> {
     const { data, error } = await supabase
       .from('bots')
-      .select('id, name, token_encrypted, telegram_username, is_active, color, welcome_message, ai_enabled, ai_system_prompt, ai_model, ai_max_history, casino_operator')
+      .select('id, name, token_encrypted, telegram_username, is_active, is_paused, color, welcome_message, ai_enabled, ai_system_prompt, ai_model, ai_max_history, casino_operator')
       .eq('is_active', true)
 
     if (error) {
@@ -34,6 +34,7 @@ export class BotManager {
         token: row.token_encrypted,
         telegram_username: row.telegram_username,
         is_active: row.is_active,
+        is_paused: row.is_paused ?? false,
         color: row.color,
         welcome_message: row.welcome_message,
         ai_enabled: row.ai_enabled ?? false,
@@ -51,7 +52,8 @@ export class BotManager {
         config.ai_system_prompt,
         config.ai_model,
         config.ai_max_history,
-        config.casino_operator
+        config.casino_operator,
+        config.is_paused
       )
       this.bots.set(config.id, { bot, config })
       console.log(`[bot-manager] Loaded bot: ${config.name} (${config.id})`)
@@ -107,6 +109,7 @@ export class BotManager {
     token_encrypted: string
     telegram_username: string | null
     is_active: boolean
+    is_paused?: boolean
     color: string
     welcome_message?: string | null
     ai_enabled?: boolean
@@ -123,6 +126,7 @@ export class BotManager {
       token: row.token_encrypted,
       telegram_username: row.telegram_username,
       is_active: row.is_active,
+      is_paused: row.is_paused ?? false,
       color: row.color,
       welcome_message: row.welcome_message ?? null,
       ai_enabled: row.ai_enabled ?? false,
@@ -140,7 +144,8 @@ export class BotManager {
       config.ai_system_prompt,
       config.ai_model,
       config.ai_max_history,
-      config.casino_operator
+      config.casino_operator,
+      config.is_paused
     )
     this.bots.set(config.id, { bot, config })
 
@@ -182,6 +187,7 @@ export class BotManager {
     token_encrypted: string
     telegram_username: string | null
     is_active: boolean
+    is_paused?: boolean
     color: string
     welcome_message?: string | null
     ai_enabled?: boolean
@@ -216,6 +222,7 @@ export class BotManager {
             const row = payload.new as any
             const old = payload.old as any
             const isRunning = this.bots.has(row.id)
+            console.log(`[bot-manager] UPDATE event - is_paused old:`, old.is_paused, 'new:', row.is_paused)
 
             // Bot deactivated → stop it
             if (!row.is_active && isRunning) {
@@ -245,13 +252,16 @@ export class BotManager {
               entry.config.color = row.color
               entry.config.telegram_username = row.telegram_username
               entry.config.welcome_message = row.welcome_message ?? null
+              entry.config.is_paused = row.is_paused ?? false
               entry.config.ai_enabled = row.ai_enabled ?? false
               entry.config.ai_system_prompt = row.ai_system_prompt ?? null
               entry.config.ai_model = row.ai_model ?? DEFAULT_AI_MODEL
               entry.config.ai_max_history = row.ai_max_history ?? DEFAULT_AI_MAX_HISTORY
               entry.config.casino_operator = row.casino_operator ?? null
-              // Update welcome message on the bot instance without restart
+              // Update welcome message & pause state on the bot instance without restart
+              console.log(`[bot-manager] Calling setIsPaused with:`, entry.config.is_paused, 'for:', row.name)
               ;(entry.bot as any).setWelcomeMessage?.(entry.config.welcome_message)
+              ;(entry.bot as any).setIsPaused?.(entry.config.is_paused)
               console.log(`[bot-manager] Config updated for: ${row.name}`)
             }
           } else if (eventType === 'DELETE') {

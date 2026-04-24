@@ -25,6 +25,7 @@ export type Database = {
           telegram_username: string | null
           token_encrypted: string
           is_active: boolean
+          is_paused: boolean
           color: string
           welcome_message: string | null
           ai_enabled: boolean
@@ -40,6 +41,7 @@ export type Database = {
           telegram_username?: string | null
           token_encrypted: string
           is_active?: boolean
+          is_paused?: boolean
           color?: string
           welcome_message?: string | null
           ai_enabled?: boolean
@@ -55,6 +57,7 @@ export type Database = {
           telegram_username?: string | null
           token_encrypted?: string
           is_active?: boolean
+          is_paused?: boolean
           color?: string
           welcome_message?: string | null
           ai_enabled?: boolean

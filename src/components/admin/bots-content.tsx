@@ -34,7 +34,7 @@ export function BotsContent() {
       const supabase = createClient()
       const { data, error } = await supabase
         .from('bots')
-        .select('id, name, telegram_username, is_active, color, welcome_message, created_at')
+        .select('id, name, telegram_username, is_active, is_paused, color, welcome_message, created_at')
         .order('created_at')
       if (error) throw error
       return data as BotPublic[]
@@ -64,11 +64,15 @@ export function BotsContent() {
   })
 
   const toggleMutation = useMutation({
-    mutationFn: async ({ id, is_active }: { id: string; is_active: boolean }) => {
+    mutationFn: async ({ id, is_active, is_paused }: { id: string; is_active?: boolean; is_paused?: boolean }) => {
+      const payload: any = { id }
+      if (is_active !== undefined) payload.is_active = is_active
+      if (is_paused !== undefined) payload.is_paused = is_paused
+
       const res = await fetch('/api/bots', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, is_active }),
+        body: JSON.stringify(payload),
       })
       if (!res.ok) {
         const err = await res.json().catch(() => ({}))
@@ -140,9 +144,14 @@ export function BotsContent() {
                   {bot.telegram_username ? `@${bot.telegram_username}` : '—'}
                 </TableCell>
                 <TableCell>
-                  <Badge variant={bot.is_active ? 'default' : 'secondary'}>
-                    {bot.is_active ? 'Activo' : 'Inactivo'}
-                  </Badge>
+                  <div className="flex gap-2">
+                    <Badge variant={bot.is_active ? 'default' : 'secondary'}>
+                      {bot.is_active ? 'Activo' : 'Inactivo'}
+                    </Badge>
+                    {bot.is_paused && (
+                      <Badge variant="destructive">Pausado</Badge>
+                    )}
+                  </div>
                 </TableCell>
                 <TableCell>
                   {format(new Date(bot.created_at), 'dd/MM/yyyy')}
@@ -162,6 +171,24 @@ export function BotsContent() {
                     <Button
                       variant="ghost"
                       size="icon"
+                      title={bot.is_paused ? 'Reanudar bot' : 'Pausar bot'}
+                      onClick={() =>
+                        toggleMutation.mutate({
+                          id: bot.id,
+                          is_paused: !bot.is_paused,
+                        })
+                      }
+                    >
+                      {bot.is_paused ? (
+                        <Power className="h-4 w-4 text-green-500" />
+                      ) : (
+                        <PowerOff className="h-4 w-4 text-orange-500" />
+                      )}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      title={bot.is_active ? 'Desactivar bot' : 'Activar bot'}
                       onClick={() =>
                         toggleMutation.mutate({
                           id: bot.id,

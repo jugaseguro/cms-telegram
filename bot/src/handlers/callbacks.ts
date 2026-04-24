@@ -6,6 +6,18 @@ import { decryptToken } from '../lib/crypto'
 import { getBalance, getTransactions, validateJwtQuick, CasinoAuthError } from '../api/casino'
 import { menuLoggedIn, menuNotLoggedIn, menuAuth, confirmYesNo, withdrawMethod } from '../keyboards'
 
+async function getBotPausedState(botId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('bots')
+      .select('is_paused')
+      .eq('id', botId)
+      .single()
+    if (error) return false
+    return data?.is_paused ?? false
+  } catch { return false }
+}
+
 async function sendAndSave(ctx: BotContext, conversationId: string, text: string, options?: { reply_markup?: InlineKeyboard; parse_mode?: 'HTML' | 'MarkdownV2' }) {
   const sent = await ctx.reply(text, options)
   await insertMessageSafe({
@@ -23,6 +35,11 @@ export async function handleCallbackQuery(ctx: BotContext) {
   if (!data || !ctx.from) return
 
   await ctx.answerCallbackQuery()
+
+  // If the bot is globally paused, we ignore all inline button interactions
+  const isPausedFromDB = await getBotPausedState(ctx.botId)
+  console.log(`[callbacks] isPaused from DB:`, isPausedFromDB)
+  if (isPausedFromDB) return
 
   const customer = await findOrCreateCustomer(ctx.from, ctx.botId)
   if (!customer) return

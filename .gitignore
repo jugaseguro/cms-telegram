@@ -57,3 +57,6 @@ bot/deploy.sh
 .claude/settings.local.json
 .agents/
 .claude/skills/
+
+# Local Netlify folder
+.netlify

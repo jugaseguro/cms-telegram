@@ -1,6 +1,19 @@
 import type { BotContext } from '../bot'
+import { supabase } from '../lib/supabase'
 import { findOrCreateCustomer, findOrCreateConversation, isMessageAlreadySaved, insertMessageSafe } from '../helpers'
 import { menuStart } from '../keyboards'
+
+async function getBotPausedState(botId: string): Promise<boolean> {
+  try {
+    const { data, error } = await supabase
+      .from('bots')
+      .select('is_paused')
+      .eq('id', botId)
+      .single()
+    if (error) return false
+    return data?.is_paused ?? false
+  } catch { return false }
+}
 
 // Matches a UUID-like code (e.g. "abc-123-def" or standard UUID)
 const UUID_REGEX = /[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i
@@ -34,6 +47,11 @@ export async function handleStart(ctx: BotContext) {
     message_type: 'text',
     telegram_message_id: ctx.message?.message_id || null,
   })
+
+  // If the bot is globally paused, we don't reply with the welcome or menu
+  const isPausedFromDB = await getBotPausedState(ctx.botId)
+  console.log(`[start] isPaused from DB:`, isPausedFromDB)
+  if (isPausedFromDB) return
 
   const welcomeText = ctx.welcomeMessage ||
     '🎉 ¡Bienvenido a 1xClub! 1xclub.bet\n\n' +

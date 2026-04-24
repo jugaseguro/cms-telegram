@@ -4,6 +4,7 @@ export interface BotConfig {
   token: string
   telegram_username: string | null
   is_active: boolean
+  is_paused: boolean
   color: string
   welcome_message: string | null
   // AI config
